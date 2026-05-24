@@ -1,0 +1,44 @@
+{
+  "name": "remotelink-mobile",
+  "version": "1.0.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "build:android": "eas build --platform android",
+    "build:ios": "eas build --platform ios"
+  },
+  "dependencies": {
+    "expo": "~50.0.6",
+    "expo-status-bar": "~1.11.1",
+    "expo-notifications": "~0.27.6",
+    "expo-device": "~5.9.3",
+    "expo-constants": "~15.4.5",
+    "expo-clipboard": "~5.0.1",
+    "expo-file-system": "~16.0.5",
+    "expo-document-picker": "~11.10.1",
+    "expo-sharing": "~11.10.0",
+    "react": "18.2.0",
+    "react-native": "0.73.4",
+    "react-native-webrtc": "^118.0.0",
+    "react-native-gesture-handler": "~2.14.0",
+    "react-native-reanimated": "~3.6.2",
+    "react-native-safe-area-context": "4.8.2",
+    "react-native-screens": "~3.29.0",
+    "@react-navigation/native": "^6.1.10",
+    "@react-navigation/bottom-tabs": "^6.5.15",
+    "@react-navigation/stack": "^6.3.21",
+    "socket.io-client": "^4.6.2",
+    "zustand": "^4.4.7",
+    "axios": "^1.6.5",
+    "react-native-vector-icons": "^10.0.3",
+    "@react-native-async-storage/async-storage": "1.21.0",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "@types/react": "~18.2.45"
+  },
+  "private": true
+}

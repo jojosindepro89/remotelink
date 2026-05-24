@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "name": "remotelink",
+  "builds": [
+    {
+      "src": "web/dist/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "https://remotelink-backend.up.railway.app/api/$1",
+      "headers": {
+        "Access-Control-Allow-Origin": "*"
+      }
+    },
+    {
+      "src": "/socket.io/(.*)",
+      "dest": "https://remotelink-backend.up.railway.app/socket.io/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/web/dist/index.html"
+    }
+  ],
+  "env": {
+    "VITE_API_URL": "https://remotelink-backend.up.railway.app/api",
+    "VITE_WS_URL": "https://remotelink-backend.up.railway.app"
+  }
+}

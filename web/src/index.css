@@ -1,0 +1,222 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Custom CSS Variables ─────────────────────────────────── */
+:root {
+  --brand: #6366f1;
+  --brand-glow: rgba(99, 102, 241, 0.4);
+  --surface: #0f0f17;
+  --surface-50: #1a1a2e;
+  --surface-100: #16213e;
+  --surface-200: #1e1e32;
+  --glass: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+}
+
+/* ── Base Styles ──────────────────────────────────────────── */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.4); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.7); }
+
+/* ── Glassmorphism ────────────────────────────────────────── */
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-strong {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ── Gradient Backgrounds ─────────────────────────────────── */
+.bg-mesh {
+  background-image:
+    radial-gradient(at 20% 50%, rgba(99, 102, 241, 0.15) 0, transparent 60%),
+    radial-gradient(at 80% 20%, rgba(168, 85, 247, 0.1) 0, transparent 50%),
+    radial-gradient(at 50% 90%, rgba(59, 130, 246, 0.08) 0, transparent 50%);
+}
+
+/* ── Glow Effects ─────────────────────────────────────────── */
+.glow-brand {
+  box-shadow: 0 0 30px var(--brand-glow), 0 0 60px rgba(99, 102, 241, 0.15);
+}
+
+.glow-success { box-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
+.glow-error   { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.btn {
+  @apply inline-flex items-center justify-center gap-2 font-semibold rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent select-none;
+}
+
+.btn-primary {
+  @apply btn bg-brand-500 text-white hover:bg-brand-400 focus:ring-brand-500 active:scale-95;
+  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.35);
+}
+
+.btn-primary:hover { box-shadow: 0 6px 32px rgba(99, 102, 241, 0.5); }
+
+.btn-ghost {
+  @apply btn text-slate-300 hover:text-white focus:ring-slate-600;
+  background: transparent;
+}
+.btn-ghost:hover { background: rgba(255,255,255,0.07); }
+
+.btn-danger {
+  @apply btn bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 focus:ring-red-500;
+}
+
+.btn-success {
+  @apply btn bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 focus:ring-emerald-500;
+}
+
+/* ── Inputs ───────────────────────────────────────────────── */
+.input {
+  @apply w-full border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500
+         transition-all duration-200 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/50;
+  background: rgba(255,255,255,0.05);
+}
+.input:focus { background: rgba(255,255,255,0.08); }
+
+/* ── Cards ────────────────────────────────────────────────── */
+.card {
+  @apply glass rounded-2xl p-5 transition-all duration-300;
+}
+
+.card-hover {
+  @apply card hover:border-brand-500/30 hover:-translate-y-0.5 cursor-pointer;
+}
+.card-hover:hover { background: rgba(255,255,255,0.06); }
+
+/* ── Status Badges ────────────────────────────────────────── */
+.badge-online  { @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25; }
+.badge-offline { @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-slate-500/15 text-slate-400 border border-slate-500/25; }
+.badge-active  { @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-brand-500/15 text-brand-400 border border-brand-500/25; }
+.badge-waiting { @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/25; }
+.badge-ended   { @apply inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-red-500/15 text-red-400 border border-red-500/25; }
+
+/* ── Animated Dot ─────────────────────────────────────────── */
+.dot-pulse {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: currentColor;
+  animation: dotPulse 2s ease-in-out infinite;
+}
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.8); }
+}
+
+/* ── Remote Screen ────────────────────────────────────────── */
+.remote-screen {
+  @apply w-full h-full object-contain;
+  image-rendering: pixelated;
+  cursor: none;
+}
+
+.remote-screen-container {
+  @apply relative w-full h-full bg-black rounded-xl overflow-hidden;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.06), inset 0 0 80px rgba(0,0,0,0.5);
+}
+
+/* ── Toolbar ──────────────────────────────────────────────── */
+.toolbar {
+  @apply fixed bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-3;
+  @apply glass-strong rounded-2xl;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  z-index: 50;
+}
+
+/* ── Chat Panel ───────────────────────────────────────────── */
+.chat-message {
+  @apply flex flex-col gap-0.5 max-w-xs;
+}
+
+.chat-message.own { @apply items-end; }
+.chat-message.own .bubble { @apply bg-brand-600 text-white; }
+.chat-bubble { @apply px-3 py-2 rounded-2xl text-sm; }
+.bubble { @apply chat-bubble text-slate-200; background: rgba(255,255,255,0.08); }
+
+/* ── Sidebar ──────────────────────────────────────────────── */
+.sidebar-link {
+  @apply flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+         text-slate-400 hover:text-white;
+}
+.sidebar-link:hover { background: rgba(255,255,255,0.06); }
+
+.sidebar-link.active {
+  @apply text-white bg-brand-500/15 border border-brand-500/25;
+}
+
+/* ── Progress Bar ─────────────────────────────────────────── */
+.progress-bar {
+  @apply h-1.5 rounded-full overflow-hidden;
+  background: rgba(255,255,255,0.08);
+}
+
+.progress-fill {
+  @apply h-full bg-gradient-to-r from-brand-500 to-brand-400 rounded-full transition-all duration-500;
+}
+
+/* ── Animations ───────────────────────────────────────────── */
+.animate-fade-in { animation: fadeIn 0.3s ease-out; }
+.animate-slide-up { animation: slideUp 0.4s ease-out; }
+
+@keyframes fadeIn   { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slideUp  { from { opacity: 0; transform: translateY(16px) } to { opacity: 1; transform: translateY(0) } }
+
+/* ── Loading Spinner ──────────────────────────────────────── */
+.spinner {
+  width: 24px; height: 24px;
+  border: 2px solid rgba(99, 102, 241, 0.3);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Code / Session Code Display ─────────────────────────── */
+.session-code {
+  @apply font-mono text-5xl font-bold tracking-[0.3em] text-brand-300;
+  text-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
+}
+
+/* ── Noise Texture Overlay ────────────────────────────────── */
+.noise::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  opacity: 0.4;
+  border-radius: inherit;
+}

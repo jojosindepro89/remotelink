@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "RemoteLink",
+    "slug": "remotelink",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0d0d14",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0d0d14"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.remotelink.mobile",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "RemoteLink uses the microphone for voice chat during remote sessions.",
+        "NSCameraUsageDescription": "RemoteLink may use the camera for video sharing.",
+        "UIBackgroundModes": ["audio", "fetch", "remote-notification"],
+        "NSLocalNetworkUsageDescription": "RemoteLink uses local network for direct P2P connections."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#6366f1"
+      },
+      "package": "com.remotelink.mobile",
+      "permissions": [
+        "RECORD_AUDIO",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "FOREGROUND_SERVICE",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-notifications",
+      [
+        "react-native-webrtc",
+        {
+          "cameraPermission": "RemoteLink uses the camera for video sharing.",
+          "microphonePermission": "RemoteLink uses the microphone for voice chat."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
+    }
+  }
+}
