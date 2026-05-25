@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: remotelink-backend
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: https://remotelink-eosin.vercel.app,https://remotelink.vercel.app
+      - key: MONGODB_URI
+        fromDatabase:
+          name: remotelink-db
+          property: connectionString
+
+databases:
+  - name: remotelink-db
+    databaseName: remotelink
+    plan: free
