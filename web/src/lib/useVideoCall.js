@@ -1,19 +1,17 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import axios from 'axios'
-import { connectSignaling, getSocket } from './signaling'
+import { connectSignaling } from './signaling'
 import useSessionStore from '../store/sessionStore'
 import toast from 'react-hot-toast'
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
 ]
 
-// Module-level peer map (cleared on unmount)
+// Module-level peer map — survives HMR but cleared on unmount
 const peers = {}
 
 export function useVideoCall() {
@@ -21,13 +19,15 @@ export function useVideoCall() {
   const navigate      = useNavigate()
   const { user, deviceId } = useSessionStore()
 
-  const localVideoRef   = useRef(null)     // bound to local <video> via forwardRef
+  const localVideoRef   = useRef(null)
   const localStream     = useRef(null)
   const socketRef       = useRef(null)
+  const bcRef           = useRef(null)   // BroadcastChannel fallback
   const mountedRef      = useRef(true)
+  const mySocketId      = useRef(`local-${Date.now().toString(36)}`)
 
-  const [localStreamState, setLocalStreamState] = useState(null) // triggers re-render
-  const [remoteStreams, setRemoteStreams]        = useState({})   // { socketId: { stream, displayName, video, audio } }
+  const [localStreamState, setLocalStreamState] = useState(null)
+  const [remoteStreams, setRemoteStreams]        = useState({})
   const [callState,    setCallState]            = useState('joining')
   const [myVideo,      setMyVideo]              = useState(true)
   const [myAudio,      setMyAudio]              = useState(true)
@@ -35,24 +35,32 @@ export function useVideoCall() {
   const [messages,     setMessages]             = useState([])
   const [chatInput,    setChatInput]            = useState('')
   const [reactions,    setReactions]            = useState([])
-  const myName = user?.displayName || `Guest-${(deviceId || '').slice(-4) || Math.random().toString(36).slice(2,6)}`
 
-  // ── Create a peer connection to one remote participant ──────────
-  const createPeer = useCallback((targetSocketId, isInitiator) => {
-    if (peers[targetSocketId]) return peers[targetSocketId]
+  const myName = user?.displayName
+    || `Guest-${(deviceId || mySocketId.current).slice(-4)}`
+
+  // ── Helper: emit via socket or BroadcastChannel ──────────────
+  const relay = useCallback((event, data) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit(event, { ...data, roomCode })
+    } else if (bcRef.current) {
+      bcRef.current.postMessage({ event, data: { ...data, roomCode } })
+    }
+  }, [roomCode])
+
+  // ── Create RTCPeerConnection to one remote ───────────────────
+  const createPeer = useCallback((targetId, isInitiator) => {
+    if (peers[targetId]) return peers[targetId]
 
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
-    peers[targetSocketId] = pc
+    peers[targetId] = pc
 
-    // Add all local tracks
     localStream.current?.getTracks().forEach(track => {
       pc.addTrack(track, localStream.current)
     })
 
     pc.onicecandidate = ({ candidate }) => {
-      if (candidate && socketRef.current?.connected) {
-        socketRef.current.emit('call:ice', { targetSocketId, candidate, roomCode })
-      }
+      if (candidate) relay('call:ice', { targetSocketId: targetId, candidate })
     }
 
     pc.ontrack = (event) => {
@@ -60,179 +68,196 @@ export function useVideoCall() {
       const stream = event.streams[0]
       setRemoteStreams(prev => ({
         ...prev,
-        [targetSocketId]: { ...prev[targetSocketId], stream },
+        [targetId]: { ...prev[targetId], stream },
       }))
     }
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed') {
-        console.warn('[WebRTC] Connection failed, restarting ICE to', targetSocketId)
-        pc.restartIce()
-      }
+      if (pc.connectionState === 'failed') pc.restartIce()
     }
 
     if (isInitiator) {
-      // Create offer immediately
       ;(async () => {
         try {
-          const offer = await pc.createOffer({
-            offerToReceiveAudio: true,
-            offerToReceiveVideo: true,
-          })
+          const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
           await pc.setLocalDescription(offer)
-          socketRef.current?.emit('call:offer', { targetSocketId, offer, roomCode })
-        } catch (err) {
-          console.error('[WebRTC] createOffer error:', err)
-        }
+          relay('call:offer', { targetSocketId: targetId, offer })
+        } catch (err) { console.error('[WebRTC] createOffer error:', err) }
       })()
     }
 
     return pc
-  }, [roomCode])
+  }, [relay])
 
-  // ── Main init effect ────────────────────────────────────────────
+  // ── Handle incoming signal messages (socket or BroadcastChannel)
+  const handleSignal = useCallback(async (event, data) => {
+    if (!mountedRef.current) return
+
+    if (event === 'call:participant_joined') {
+      const { socketId, displayName } = data
+      if (socketId === mySocketId.current) return
+      setRemoteStreams(prev => ({ ...prev, [socketId]: { displayName, video: true, audio: true } }))
+    }
+
+    else if (event === 'call:offer') {
+      const { fromSocketId, offer } = data
+      if (fromSocketId === mySocketId.current) return
+      const pc = createPeer(fromSocketId, false)
+      try {
+        if (pc.signalingState !== 'stable') return
+        await pc.setRemoteDescription(new RTCSessionDescription(offer))
+        const answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+        relay('call:answer', { targetSocketId: fromSocketId, answer })
+      } catch (err) { console.error('[WebRTC] handleOffer error:', err) }
+    }
+
+    else if (event === 'call:answer') {
+      const { fromSocketId, answer } = data
+      const pc = peers[fromSocketId]
+      if (pc?.signalingState === 'have-local-offer') {
+        try { await pc.setRemoteDescription(new RTCSessionDescription(answer)) }
+        catch (err) { console.error('[WebRTC] setAnswer error:', err) }
+      }
+    }
+
+    else if (event === 'call:ice') {
+      const { fromSocketId, candidate } = data
+      const pc = peers[fromSocketId]
+      if (pc && candidate) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(candidate)) }
+        catch (err) { console.warn('[WebRTC] addICE error:', err) }
+      }
+    }
+
+    else if (event === 'call:participant_left') {
+      const { socketId } = data
+      peers[socketId]?.close()
+      delete peers[socketId]
+      setRemoteStreams(prev => { const n = { ...prev }; delete n[socketId]; return n })
+      toast('A participant left', { icon: '👋' })
+    }
+
+    else if (event === 'call:media_toggle') {
+      const { fromSocketId, video, audio } = data
+      setRemoteStreams(prev => ({
+        ...prev,
+        [fromSocketId]: { ...prev[fromSocketId], video, audio },
+      }))
+    }
+
+    else if (event === 'chat:message') {
+      setMessages(prev => [...prev, data])
+    }
+
+    else if (event === 'call:reaction') {
+      const { emoji, displayName } = data
+      const id = Date.now() + Math.random()
+      setReactions(prev => [...prev, { id, emoji, displayName }])
+      setTimeout(() => setReactions(prev => prev.filter(r => r.id !== id)), 3500)
+    }
+  }, [createPeer, relay])
+
+  // ── Main init ────────────────────────────────────────────────
   useEffect(() => {
     mountedRef.current = true
 
     const init = async () => {
+      // 1. Get camera + mic — never fail hard
+      let stream
       try {
-        // 1. Get camera + mic
-        let stream
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24 } },
+          audio: { echoCancellation: true, noiseSuppression: true },
+        })
+      } catch (videoErr) {
+        console.warn('[VideoCall] Camera blocked, trying audio only:', videoErr.message)
         try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24 } },
-            audio: { echoCancellation: true, noiseSuppression: true },
-          })
-        } catch (mediaErr) {
-          console.warn('[VideoCall] No camera/mic, using audio only:', mediaErr.message)
-          try {
-            stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-          } catch {
-            stream = new MediaStream() // empty — still let them join
-          }
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          toast('Camera not available — joining audio only', { icon: '🎙️' })
+        } catch (audioErr) {
+          console.warn('[VideoCall] Audio also blocked, joining without media')
+          stream = new MediaStream()
+          toast('No camera/mic detected — joining to watch only', { icon: '👁️' })
         }
+      }
 
-        localStream.current = stream
-        setLocalStreamState(stream)
+      if (!mountedRef.current) return
 
-        // Bind to local video element
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream
-          localVideoRef.current.play().catch(() => {})
-        }
+      localStream.current = stream
+      setLocalStreamState(stream)
 
-        // 2. Connect signaling socket
+      if (localVideoRef.current && stream.getTracks().length > 0) {
+        localVideoRef.current.srcObject = stream
+        localVideoRef.current.play().catch(() => {})
+      }
+
+      // 2. Try socket connection (non-blocking — fall back to BroadcastChannel)
+      let useSocket = false
+      try {
         const sock = connectSignaling()
         socketRef.current = sock
 
-        // Wait for connection (max 8s)
-        if (!sock.connected) {
-          await new Promise((resolve, reject) => {
-            const t = setTimeout(() => reject(new Error('Socket connection timeout')), 8000)
+        if (!sock.connected && sock.on) {
+          // Give socket 5 seconds max — don't block UI on failure
+          await new Promise((resolve) => {
+            const t = setTimeout(resolve, 5000)   // resolve either way
             sock.once('connect', () => { clearTimeout(t); resolve() })
-            sock.once('connect_error', (err) => { clearTimeout(t); reject(err) })
+            sock.once('connect_error', () => { clearTimeout(t); resolve() })
           })
         }
 
-        if (!mountedRef.current) return
+        useSocket = sock.connected
+      } catch {
+        useSocket = false
+      }
 
-        // 3. Join the call room
+      if (!mountedRef.current) return
+
+      // 3a. Socket path — join room via backend
+      if (useSocket) {
+        const sock = socketRef.current
         sock.emit('call:join', { roomCode, displayName: myName }, (res) => {
           if (!mountedRef.current) return
-          if (res?.error) {
-            toast.error(res.error)
-            setCallState('error')
-            return
-          }
-
+          if (res?.error) { toast.error(res.error); return }
           setCallState('connected')
-
-          // Connect to all existing participants
           ;(res.participants || []).forEach(p => {
-            setRemoteStreams(prev => ({
-              ...prev,
-              [p.socketId]: {
-                displayName: p.displayName,
-                video: p.video !== false,
-                audio: p.audio !== false,
-              },
-            }))
-            createPeer(p.socketId, true)   // we initiate to existing peers
+            setRemoteStreams(prev => ({ ...prev, [p.socketId]: { displayName: p.displayName, video: true, audio: true } }))
+            createPeer(p.socketId, true)
           })
         })
 
-        // ── Socket event handlers ─────────────────────────────────
+        sock.on('call:participant_joined', d => handleSignal('call:participant_joined', d))
+        sock.on('call:offer',              d => handleSignal('call:offer',              { ...d, fromSocketId: d.fromSocketId }))
+        sock.on('call:answer',             d => handleSignal('call:answer',             { ...d, fromSocketId: d.fromSocketId }))
+        sock.on('call:ice',                d => handleSignal('call:ice',                { ...d, fromSocketId: d.fromSocketId }))
+        sock.on('call:participant_left',   d => handleSignal('call:participant_left',   d))
+        sock.on('call:media_toggle',       d => handleSignal('call:media_toggle',       { ...d, fromSocketId: d.fromSocketId }))
+        sock.on('chat:message',            d => handleSignal('chat:message',            d))
+        sock.on('call:reaction',           d => handleSignal('call:reaction',           d))
 
-        sock.on('call:participant_joined', ({ socketId, displayName }) => {
-          if (!mountedRef.current) return
-          setRemoteStreams(prev => ({ ...prev, [socketId]: { displayName, video: true, audio: true } }))
-          // New joiner sends the offer to us; we respond (don't initiate)
+      } else {
+        // 3b. BroadcastChannel fallback — same-browser tab-to-tab calls
+        console.info('[VideoCall] Backend offline — using BroadcastChannel (same-browser only)')
+        toast('Connecting locally (backend offline) — both tabs must be on the same browser', {
+          icon: '📡', duration: 5000,
         })
 
-        sock.on('call:offer', async ({ fromSocketId, offer }) => {
-          if (!mountedRef.current) return
-          const pc = createPeer(fromSocketId, false)
-          try {
-            await pc.setRemoteDescription(new RTCSessionDescription(offer))
-            const answer = await pc.createAnswer()
-            await pc.setLocalDescription(answer)
-            sock.emit('call:answer', { targetSocketId: fromSocketId, answer, roomCode })
-          } catch (err) { console.error('[WebRTC] handleOffer error:', err) }
-        })
+        const bc = new BroadcastChannel(`remotelink:${roomCode}`)
+        bcRef.current = bc
 
-        sock.on('call:answer', async ({ fromSocketId, answer }) => {
-          const pc = peers[fromSocketId]
-          if (pc?.signalingState === 'have-local-offer') {
-            try { await pc.setRemoteDescription(new RTCSessionDescription(answer)) }
-            catch (err) { console.error('[WebRTC] setAnswer error:', err) }
-          }
-        })
-
-        sock.on('call:ice', async ({ fromSocketId, candidate }) => {
-          const pc = peers[fromSocketId]
-          if (!pc) return
-          try { await pc.addIceCandidate(new RTCIceCandidate(candidate)) }
-          catch (err) { console.warn('[WebRTC] addICE error:', err) }
-        })
-
-        sock.on('call:participant_left', ({ socketId }) => {
-          if (!mountedRef.current) return
-          peers[socketId]?.close()
-          delete peers[socketId]
-          setRemoteStreams(prev => {
-            const next = { ...prev }
-            delete next[socketId]
-            return next
-          })
-          toast(`A participant left`, { icon: '👋' })
-        })
-
-        sock.on('call:media_toggle', ({ fromSocketId, video, audio }) => {
-          if (!mountedRef.current) return
-          setRemoteStreams(prev => ({
-            ...prev,
-            [fromSocketId]: { ...prev[fromSocketId], video, audio },
-          }))
-        })
-
-        sock.on('chat:message', (msg) => {
-          if (!mountedRef.current) return
-          setMessages(prev => [...prev, msg])
-        })
-
-        sock.on('call:reaction', ({ emoji, displayName }) => {
-          if (!mountedRef.current) return
-          const id = Date.now() + Math.random()
-          setReactions(prev => [...prev, { id, emoji, displayName }])
-          setTimeout(() => setReactions(prev => prev.filter(r => r.id !== id)), 3500)
-        })
-
-      } catch (err) {
-        console.error('[VideoCall] init error:', err)
-        if (mountedRef.current) {
-          toast.error(err.message || 'Could not join call')
-          setCallState('error')
+        bc.onmessage = ({ data: msg }) => {
+          if (msg.data?.fromSocketId === mySocketId.current) return
+          handleSignal(msg.event, msg.data)
         }
+
+        // Announce ourselves
+        bc.postMessage({
+          event: 'call:participant_joined',
+          data: { socketId: mySocketId.current, displayName: myName, roomCode },
+        })
+
+        setCallState('connected')
       }
     }
 
@@ -240,76 +265,67 @@ export function useVideoCall() {
 
     return () => {
       mountedRef.current = false
-
-      // Signal leave
-      socketRef.current?.emit('call:leave', { roomCode })
-      socketRef.current?.off('call:participant_joined')
-      socketRef.current?.off('call:offer')
-      socketRef.current?.off('call:answer')
-      socketRef.current?.off('call:ice')
-      socketRef.current?.off('call:participant_left')
-      socketRef.current?.off('call:media_toggle')
-      socketRef.current?.off('chat:message')
-      socketRef.current?.off('call:reaction')
-
-      // Close all peer connections
+      const sock = socketRef.current
+      if (sock?.connected) {
+        sock.emit('call:leave', { roomCode })
+        ;['call:participant_joined','call:offer','call:answer','call:ice',
+          'call:participant_left','call:media_toggle','chat:message','call:reaction']
+          .forEach(e => sock.off(e))
+      }
+      bcRef.current?.postMessage({ event: 'call:participant_left', data: { socketId: mySocketId.current, roomCode } })
+      bcRef.current?.close()
       Object.values(peers).forEach(pc => pc.close())
       for (const k in peers) delete peers[k]
-
-      // Stop local media
       localStream.current?.getTracks().forEach(t => t.stop())
       localStream.current = null
     }
   }, [roomCode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Media controls ──────────────────────────────────────────────
+  // ── Media controls ───────────────────────────────────────────
 
   const toggleVideo = useCallback(() => {
     const track = localStream.current?.getVideoTracks()[0]
     if (!track) return
     track.enabled = !track.enabled
     setMyVideo(track.enabled)
-    socketRef.current?.emit('call:media_toggle', { roomCode, video: track.enabled, audio: myAudio })
-  }, [myAudio, roomCode])
+    relay('call:media_toggle', { fromSocketId: mySocketId.current, video: track.enabled, audio: myAudio })
+  }, [myAudio, relay])
 
   const toggleAudio = useCallback(() => {
     const track = localStream.current?.getAudioTracks()[0]
     if (!track) return
     track.enabled = !track.enabled
     setMyAudio(track.enabled)
-    socketRef.current?.emit('call:media_toggle', { roomCode, video: myVideo, audio: track.enabled })
-  }, [myVideo, roomCode])
+    relay('call:media_toggle', { fromSocketId: mySocketId.current, video: myVideo, audio: track.enabled })
+  }, [myVideo, relay])
 
   const sendReaction = useCallback((emoji) => {
-    socketRef.current?.emit('call:reaction', { roomCode, emoji })
+    relay('call:reaction', { emoji, displayName: myName })
     const id = Date.now() + Math.random()
     setReactions(prev => [...prev, { id, emoji, displayName: 'You' }])
     setTimeout(() => setReactions(prev => prev.filter(r => r.id !== id)), 3500)
-  }, [roomCode])
+  }, [relay, myName])
 
   const sendChat = useCallback(() => {
     if (!chatInput.trim()) return
-    socketRef.current?.emit('chat:message', { message: chatInput.trim(), roomCode })
-    setMessages(prev => [...prev, {
-      sender: myName, senderId: 'me',
-      message: chatInput.trim(), timestamp: new Date().toISOString(),
-    }])
+    relay('chat:message', { sender: myName, message: chatInput.trim(), timestamp: new Date().toISOString() })
+    setMessages(prev => [...prev, { sender: 'You', senderId: 'me', message: chatInput.trim(), timestamp: new Date().toISOString() }])
     setChatInput('')
-  }, [chatInput, myName, roomCode])
+  }, [chatInput, myName, relay])
 
   const leaveCall = useCallback(() => {
-    socketRef.current?.emit('call:leave', { roomCode })
+    relay('call:leave', { socketId: mySocketId.current })
     Object.values(peers).forEach(pc => pc.close())
     for (const k in peers) delete peers[k]
     localStream.current?.getTracks().forEach(t => t.stop())
     navigate('/')
-  }, [roomCode, navigate])
+  }, [relay, navigate])
 
   const copyLink = useCallback(() => {
     const link = `${window.location.origin}/call/${roomCode}`
-    navigator.clipboard.writeText(link).then(() => toast.success('Join link copied!')).catch(() => {
-      toast.success(`Link: ${link}`)
-    })
+    navigator.clipboard.writeText(link)
+      .then(() => toast.success('Join link copied! 🔗'))
+      .catch(() => toast.success(`Share this link: ${link}`))
   }, [roomCode])
 
   return {
@@ -321,14 +337,18 @@ export function useVideoCall() {
   }
 }
 
-// ── API helpers ──────────────────────────────────────────────────
+// ── API helpers (used from Home.jsx) ─────────────────────────────
 
 export async function createCallRoom(headers = {}) {
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+  const { default: axios } = await import('axios')
   const res = await axios.post(`${API}/calls`, {}, { headers })
   return res.data
 }
 
 export async function getCallRoom(roomCode) {
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+  const { default: axios } = await import('axios')
   const res = await axios.get(`${API}/calls/${roomCode}`)
   return res.data
 }
