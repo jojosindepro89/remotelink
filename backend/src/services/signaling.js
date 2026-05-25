@@ -219,10 +219,36 @@ function initSignaling(httpServer) {
      * call:join — join a call room. Notifies all existing participants.
      */
     socket.on('call:join', ({ roomCode, displayName }, callback) => {
-      const rooms = getCallRooms()
-      const room  = rooms.get(roomCode?.toUpperCase())
+      if (!roomCode || typeof roomCode !== 'string' || roomCode.trim().length < 3) {
+        return callback?.({ error: 'Call room not found or expired' })
+      }
 
-      if (!room)                         return callback?.({ error: 'Call room not found or expired' })
+      const rooms = getCallRooms()
+      let room = rooms.get(roomCode.toUpperCase())
+
+      if (!room) {
+        const formattedCode = roomCode.toUpperCase()
+        const roomId = require('crypto').randomUUID()
+        room = {
+          roomId,
+          roomCode: formattedCode,
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 4 * 60 * 60 * 1000), // 4 hour TTL
+          participants: [],
+          status: 'waiting',
+          hostDeviceId: socket.deviceId || null,
+        }
+        rooms.set(roomId, room)
+        rooms.set(formattedCode, room)
+        logger.info(`Video call room created on-demand: ${formattedCode} (socket: ${socket.id})`)
+
+        // Auto-cleanup after 4 hours
+        setTimeout(() => {
+          rooms.delete(roomId)
+          rooms.delete(formattedCode)
+        }, 4 * 60 * 60 * 1000)
+      }
+
       if (new Date() > room.expiresAt)   return callback?.({ error: 'Call room has expired' })
 
       // Deduplicate
