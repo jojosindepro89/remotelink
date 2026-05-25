@@ -136,15 +136,52 @@ export default function Session() {
     sendControlEvent({ type: 'mousemove', x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height })
   }, [controlEnabled, isHost])
 
+  const handleMouseDown = useCallback((e) => {
+    if (!controlEnabled || isHost) return
+    e.preventDefault()
+    const rect = e.currentTarget.getBoundingClientRect()
+    sendControlEvent({
+      type: 'mousedown',
+      button: e.button,
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+    })
+  }, [controlEnabled, isHost])
+
+  const handleMouseUp = useCallback((e) => {
+    if (!controlEnabled || isHost) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    sendControlEvent({
+      type: 'mouseup',
+      button: e.button,
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+    })
+  }, [controlEnabled, isHost])
+
   const handleMouseClick = useCallback((e) => {
     if (!controlEnabled || isHost) return
-    sendControlEvent({ type: 'mouseclick', button: e.button })
+    const rect = e.currentTarget.getBoundingClientRect()
+    sendControlEvent({
+      type: 'click',
+      button: e.button,
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+    })
   }, [controlEnabled, isHost])
 
   const handleKeyDown = useCallback((e) => {
     if (!controlEnabled || isHost) return
     e.preventDefault()
-    sendControlEvent({ type: 'keydown', key: e.key, code: e.code, modifiers: { ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey } })
+    sendControlEvent({
+      type: 'keydown',
+      key: e.key,
+      code: e.code,
+      ctrl: e.ctrlKey,
+      alt: e.altKey,
+      shift: e.shiftKey,
+      meta: e.metaKey
+    })
   }, [controlEnabled, isHost])
 
   const handleWheel = useCallback((e) => {
@@ -153,9 +190,11 @@ export default function Session() {
   }, [controlEnabled, isHost])
 
   const handleIncomingControl = (data) => {
-    // On desktop host: inject OS-level control events
-    // In Electron production: use robotjs/nut-js via IPC
-    console.log('[Control Event]', data)
+    if (isHost && isElectron && window.electronAPI) {
+      window.electronAPI.executeControl(data)
+    } else {
+      console.log('[Control Event]', data)
+    }
   }
 
   const handleClipboardSync = async () => {
@@ -291,8 +330,12 @@ export default function Session() {
       {/* ── Main Content ── */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* Video */}
-        <div style={{ flex: 1, position: 'relative', background: '#000' }}
-          onMouseMove={handleMouseMove} onClick={handleMouseClick} onWheel={handleWheel}
+        <div 
+          onMouseMove={handleMouseMove} 
+          onMouseDown={handleMouseDown} 
+          onMouseUp={handleMouseUp} 
+          onClick={handleMouseClick} 
+          onWheel={handleWheel}
           style={{ flex: 1, position: 'relative', background: '#000', cursor: controlEnabled && !isHost ? 'crosshair' : 'default' }}>
           <video ref={videoRef} autoPlay playsInline muted={isHost}
             style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
