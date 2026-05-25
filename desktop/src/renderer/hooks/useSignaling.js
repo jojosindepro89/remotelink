@@ -17,7 +17,7 @@ export function connectSignaling(serverUrl) {
       deviceId: store.deviceId,
       displayName: store.user?.displayName || `Desktop-${store.deviceId?.slice(-6)}`,
     },
-    transports: ['websocket', 'polling'],
+    transports: ['websocket'],
     reconnectionAttempts: 15,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 8000,

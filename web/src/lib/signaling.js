@@ -36,7 +36,7 @@ export function connectSignaling() {
         deviceId,
         displayName: store.user?.displayName || `Web-${deviceId.slice(-6)}`,
       },
-      transports:          ['websocket', 'polling'],
+      transports:          ['websocket'],
       reconnectionAttempts: 5,
       reconnectionDelay:    2000,
       reconnectionDelayMax: 10000,
