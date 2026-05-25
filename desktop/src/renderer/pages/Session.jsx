@@ -34,6 +34,7 @@ export default function Session() {
   const [showSourcePicker, setShowSourcePicker] = useState(false)
   const [quality, setQuality] = useState('auto')
   const [copied, setCopied] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(false)
   const [chatMessages, setChatMessages] = useState([])
   const [chatInput, setChatInput] = useState('')
   const [fileUploads, setFileUploads] = useState([])
@@ -227,6 +228,22 @@ export default function Session() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const handleCopyLink = () => {
+    const code = activeSession?.sessionCode || ''
+    const pass = activeSession?.password || ''
+    const sessionId = activeSession?.sessionId || ''
+    const inviteUrl = `https://remotelink-eosin.vercel.app/session/${sessionId}?host=false&code=${code}&pass=${pass}`
+    
+    if (isElectron && window.electronAPI) {
+      window.electronAPI.clipboardWrite(inviteUrl)
+    } else {
+      navigator.clipboard.writeText(inviteUrl)
+    }
+    setCopiedLink(true)
+    toast.success('Instant invite link copied!')
+    setTimeout(() => setCopiedLink(false), 2000)
+  }
+
   const handleLeave = () => {
     if (isHost) getSocket()?.emit('session:end', { sessionId })
     closePeerConnection()
@@ -307,6 +324,18 @@ export default function Session() {
                 <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 700, color: '#34d399' }}>
                   {activeSession.password}
                 </span>
+              </div>
+              <div style={{ width: 1, height: 16, background: 'rgba(255,255,255,0.1)' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button onClick={handleCopyLink} style={{
+                  display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(99,102,241,0.15)',
+                  border: '1px solid rgba(99,102,241,0.3)', borderRadius: 6, color: '#cbd5e1',
+                  fontSize: 10, padding: '3px 8px', cursor: 'pointer', outline: 'none', fontWeight: 600,
+                  transition: 'all 0.15s'
+                }}>
+                  {copiedLink ? <Check size={11} style={{ color: '#10b981' }} /> : <Copy size={11} />}
+                  {copiedLink ? 'Copied Invite' : 'Copy Invite Link'}
+                </button>
               </div>
             </>
           )}
