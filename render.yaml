@@ -15,8 +15,16 @@ services:
         value: 10000
       - key: JWT_SECRET
         generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
       - key: ALLOWED_ORIGINS
         value: https://remotelink-eosin.vercel.app,https://remotelink.vercel.app
+      - key: CLIENT_URL
+        value: https://remotelink-eosin.vercel.app
+      - key: STUN_URL
+        value: stun:stun.l.google.com:19302
       - key: MONGODB_URI
         fromDatabase:
           name: remotelink-db
