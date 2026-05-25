@@ -64,7 +64,10 @@ export function createPeerConnection(iceConfig, handlers = {}) {
  * Returns the MediaStream. Caller should call addStreamToPeer() after.
  */
 export function canShareScreen() {
-  return typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+  if (typeof navigator.mediaDevices?.getDisplayMedia !== 'function') return false
+  const ua = navigator.userAgent || ''
+  if (/Android|iPhone|iPad|iPod|Mobile|CriOS|FxiOS/i.test(ua)) return false
+  return true
 }
 
 export async function captureScreen(options = {}) {

@@ -269,6 +269,8 @@ export default function Home() {
                 >
                   {isStarting ? (
                     <><span className="spinner" style={{ width: 16, height: 16 }} /> Starting…</>
+                  ) : !canShareScreen() ? (
+                    <><Smartphone size={16} /> Desktop Only</>
                   ) : (
                     <><Zap size={16} /> Start Session</>
                   )}
