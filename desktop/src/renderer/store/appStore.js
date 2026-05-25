@@ -32,7 +32,7 @@ const useAppStore = create(
         clipboardSync: true,
         soundEnabled: true,
         startMinimized: false,
-        serverUrl: 'http://localhost:3001',
+        serverUrl: 'https://remotelink-backend.onrender.com',
       },
 
       // Desktop specific
@@ -71,11 +71,18 @@ const useAppStore = create(
     }),
     {
       name: 'remotelink-desktop-store',
+      version: 1,
       partialize: (state) => ({
         token: state.token, deviceId: state.deviceId, user: state.user,
         isAuthenticated: state.isAuthenticated, sessionHistory: state.sessionHistory,
         settings: state.settings,
       }),
+      migrate: (persisted, version) => {
+        if (version === 0 && persisted.settings?.serverUrl === 'http://localhost:3001') {
+          persisted.settings.serverUrl = 'https://remotelink-backend.onrender.com'
+        }
+        return persisted
+      },
     }
   )
 )
