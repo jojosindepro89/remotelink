@@ -63,6 +63,10 @@ export function createPeerConnection(iceConfig, handlers = {}) {
  * Capture screen using getDisplayMedia (browser).
  * Returns the MediaStream. Caller should call addStreamToPeer() after.
  */
+export function canShareScreen() {
+  return typeof navigator.mediaDevices?.getDisplayMedia === 'function'
+}
+
 export async function captureScreen(options = {}) {
   try {
     const constraints = {
@@ -92,6 +96,10 @@ export async function captureScreen(options = {}) {
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
       localStream = stream
       return stream
+    }
+
+    if (!canShareScreen()) {
+      throw new Error('Screen sharing is not supported on this device. Use a desktop browser or the desktop app to host a session.')
     }
 
     const stream = await navigator.mediaDevices.getDisplayMedia(constraints)

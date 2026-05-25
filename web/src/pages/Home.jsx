@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import useSessionStore from '../store/sessionStore'
 import { connectSignaling, getSocket } from '../lib/signaling'
+import { canShareScreen } from '../lib/webrtc'
 import toast from 'react-hot-toast'
 
 // ── Local session creation (works without backend) ─────────────
@@ -263,7 +264,7 @@ export default function Home() {
                 <button
                   id="btn-start-session"
                   onClick={handleStartSession}
-                  disabled={isStarting}
+                  disabled={isStarting || !canShareScreen()}
                   className="btn-primary w-full py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isStarting ? (
@@ -272,7 +273,11 @@ export default function Home() {
                     <><Zap size={16} /> Start Session</>
                   )}
                 </button>
-                <p className="text-xs text-slate-500 mt-3 text-center">Your screen won't share until you approve</p>
+                <p className="text-xs text-slate-500 mt-3 text-center">
+                  {canShareScreen()
+                    ? "Your screen won't share until you approve"
+                    : "Screen sharing requires a desktop browser or the desktop app"}
+                </p>
               </div>
             </div>
 
