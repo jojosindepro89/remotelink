@@ -21,7 +21,7 @@ const VideoTile = forwardRef(function VideoTile(
     }
   }, [stream, ref])
 
-  const hasVideo = videoEnabled && !!stream
+  const hasVideo = videoEnabled && stream && stream.getVideoTracks().length > 0
 
   return (
     <div

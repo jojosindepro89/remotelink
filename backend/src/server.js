@@ -32,7 +32,9 @@ app.use(helmet({
 app.use(cors({
   origin: (origin, callback) => {
     const allowed = (process.env.ALLOWED_ORIGINS || '*').split(',').map(s => s.trim())
-    if (allowed.includes('*') || !origin || allowed.includes(origin)) {
+    const isVercel = origin && origin.startsWith('https://') && origin.endsWith('.vercel.app')
+    const isLocalhost = origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))
+    if (allowed.includes('*') || !origin || allowed.includes(origin) || isVercel || isLocalhost) {
       callback(null, true)
     } else {
       callback(new Error(`CORS blocked: ${origin}`))
@@ -80,17 +82,45 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/calls', callRoutes);
 
 // ── ICE Server Config Endpoint ────────────────────────────────
-app.get('/api/ice-config', (req, res) => {
-  res.json({
-    iceServers: [
-      { urls: process.env.STUN_URL || 'stun:stun.l.google.com:19302' },
-      ...(process.env.TURN_URL ? [{
-        urls: process.env.TURN_URL,
-        username: process.env.TURN_USERNAME,
-        credential: process.env.TURN_CREDENTIAL,
-      }] : []),
-    ],
-  });
+app.get('/api/ice-config', async (req, res) => {
+  let iceServers = [
+    { urls: process.env.STUN_URL || 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' }
+  ];
+
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+
+  if (sid && token) {
+    try {
+      const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+      const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Tokens.json`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.ice_servers && data.ice_servers.length > 0) {
+          iceServers = data.ice_servers;
+        }
+      } else {
+        logger.error(`Twilio token API returned error status: ${response.status}`);
+      }
+    } catch (err) {
+      logger.error('Failed to fetch Twilio ICE servers', err);
+    }
+  } else if (process.env.TURN_URL) {
+    iceServers.push({
+      urls: process.env.TURN_URL,
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL,
+    });
+  }
+
+  res.json({ iceServers });
 });
 
 // ── API Docs ──────────────────────────────────────────────────

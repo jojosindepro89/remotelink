@@ -3,8 +3,11 @@
   "name": "remotelink",
   "builds": [
     {
-      "src": "web/dist/**",
-      "use": "@vercel/static"
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "web/dist"
+      }
     }
   ],
   "routes": [
@@ -21,7 +24,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/web/dist/index.html"
+      "dest": "/index.html"
     }
   ],
   "env": {

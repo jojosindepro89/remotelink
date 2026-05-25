@@ -56,12 +56,6 @@ export async function captureDesktop(sourceId) {
         mandatory: {
           chromeMediaSource: 'desktop',
           chromeMediaSourceId: sourceId,
-          minWidth: 1280,
-          maxWidth: 3840,
-          minHeight: 720,
-          maxHeight: 2160,
-          minFrameRate: 15,
-          maxFrameRate: 30,
         },
       },
     })

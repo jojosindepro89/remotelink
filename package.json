@@ -4,6 +4,7 @@
   "description": "RemoteLink Monorepo — Cross-platform remote desktop and screen sharing",
   "private": true,
   "scripts": {
+    "build": "npm install --prefix web && npm run build --prefix web",
     "dev": "npm run dev --prefix desktop",
     "dev:backend": "npm run dev --prefix backend",
     "dev:web": "npm run dev --prefix web",

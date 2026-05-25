@@ -272,12 +272,14 @@ function RemoteTile({ stream, displayName, videoEnabled, audioEnabled }) {
     else el.srcObject = null
   }, [stream])
 
+  const hasVideo = videoEnabled && stream && stream.getVideoTracks().length > 0
+
   return (
     <div style={{ position: 'relative', background: '#0d0d18', borderRadius: 16, overflow: 'hidden',
       border: '1px solid rgba(255,255,255,0.07)', aspectRatio: '16/9', minHeight: 180 }}>
       <video ref={videoRef} autoPlay playsInline muted={false}
-        style={{ width: '100%', height: '100%', objectFit: 'cover', display: videoEnabled && stream ? 'block' : 'none' }} />
-      {(!videoEnabled || !stream) && (
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: hasVideo ? 'block' : 'none' }} />
+      {!hasVideo && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
           <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg,rgba(99,102,241,0.3),rgba(168,85,247,0.3))', border:'1px solid rgba(99,102,241,0.3)', display:'flex', alignItems:'center', justifyContent:'center' }}>
             <span style={{ fontWeight: 800, fontSize: 22, color: '#a5b4fc' }}>{displayName?.charAt(0)?.toUpperCase()}</span>

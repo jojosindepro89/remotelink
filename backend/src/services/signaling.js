@@ -19,7 +19,16 @@ function getCallRooms() {
 function initSignaling(httpServer) {
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || '*',
+      origin: (origin, callback) => {
+        const allowed = (process.env.ALLOWED_ORIGINS || '*').split(',').map(s => s.trim())
+        const isVercel = origin && origin.startsWith('https://') && origin.endsWith('.vercel.app')
+        const isLocalhost = origin && (origin.includes('localhost') || origin.includes('127.0.0.1'))
+        if (allowed.includes('*') || !origin || allowed.includes(origin) || isVercel || isLocalhost) {
+          callback(null, true)
+        } else {
+          callback(new Error(`CORS blocked: ${origin}`))
+        }
+      },
       methods: ['GET', 'POST'],
       credentials: true,
     },

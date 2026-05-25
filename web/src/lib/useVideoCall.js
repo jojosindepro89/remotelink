@@ -219,7 +219,11 @@ export function useVideoCall() {
         const sock = socketRef.current
         sock.emit('call:join', { roomCode, displayName: myName }, (res) => {
           if (!mountedRef.current) return
-          if (res?.error) { toast.error(res.error); return }
+          if (res?.error) {
+            toast.error(res.error)
+            setCallState('error')
+            return
+          }
           setCallState('connected')
           ;(res.participants || []).forEach(p => {
             setRemoteStreams(prev => ({ ...prev, [p.socketId]: { displayName: p.displayName, video: true, audio: true } }))
