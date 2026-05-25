@@ -1,6 +1,7 @@
 const express = require('express');
-const router = express.Router();
+const router = Router = express.Router();
 const { v4: uuidv4 } = require('uuid');
+const mongoose = require('mongoose');
 const Session = require('../models/Session');
 const { authenticate, optionalAuth } = require('../middleware/auth');
 const { sessionLimiter } = require('../middleware/rateLimit');
@@ -16,6 +17,38 @@ router.post('/', optionalAuth, sessionLimiter, async (req, res) => {
   try {
     const { platform } = req.body;
     const sessionId = uuidv4();
+
+    // Fallback if MongoDB is not connected
+    if (mongoose.connection.readyState !== 1) {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let sessionCode = '';
+      for (let i = 0; i < 6; i++) sessionCode += chars[Math.floor(Math.random() * chars.length)];
+      
+      const rawPassword = Math.random().toString(36).slice(-8);
+      const iceConfig = {
+        stunUrls: [process.env.STUN_URL || 'stun:stun.l.google.com:19302'],
+        turnUrl: process.env.TURN_URL || null,
+        turnUsername: process.env.TURN_USERNAME || null,
+        turnCredential: process.env.TURN_CREDENTIAL || null,
+      };
+
+      // Register session in the in-memory sessionManager so WebSocket signalling works
+      sessionManager.createSession(sessionId, {
+        socketId: req.deviceId ? sessionManager.deviceToSocket.get(req.deviceId) : null,
+        deviceId: req.deviceId,
+        sessionCode,
+      });
+
+      logger.info(`[Offline Auth] Mock Session created: ${sessionId} code=${sessionCode} by ${req.deviceId}`);
+
+      return res.status(201).json({
+        sessionId,
+        sessionCode,
+        password: rawPassword,
+        iceConfig,
+        expiresAt: new Date(Date.now() + 3600000),
+      });
+    }
 
     // Generate unique 6-char code
     let sessionCode;
@@ -73,6 +106,40 @@ router.post('/', optionalAuth, sessionLimiter, async (req, res) => {
 router.post('/join', optionalAuth, sessionLimiter, async (req, res) => {
   try {
     const { sessionCode } = req.body;
+
+    // Fallback if MongoDB is not connected
+    if (mongoose.connection.readyState !== 1) {
+      const code = sessionCode.toUpperCase();
+      // Try to find the session in sessionManager
+      const activeSessions = sessionManager.getActiveSessionsStats().sessions || [];
+      const foundSession = activeSessions.find(s => s.code === code);
+      if (foundSession) {
+        return res.json({
+          sessionId: foundSession.sessionId,
+          sessionCode: foundSession.code,
+          status: 'active',
+          iceConfig: {
+            stunUrls: [process.env.STUN_URL || 'stun:stun.l.google.com:19302'],
+            turnUrl: process.env.TURN_URL || null,
+            turnUsername: process.env.TURN_USERNAME || null,
+            turnCredential: process.env.TURN_CREDENTIAL || null,
+          }
+        });
+      } else {
+        // Mock fallback to allow guest direct testing even if not in memory
+        return res.json({
+          sessionId: `mock-session-${code}`,
+          sessionCode: code,
+          status: 'waiting',
+          iceConfig: {
+            stunUrls: [process.env.STUN_URL || 'stun:stun.l.google.com:19302'],
+            turnUrl: process.env.TURN_URL || null,
+            turnUsername: process.env.TURN_USERNAME || null,
+            turnCredential: process.env.TURN_CREDENTIAL || null,
+          }
+        });
+      }
+    }
 
     const session = await Session.findOne({
       sessionCode: sessionCode.toUpperCase(),

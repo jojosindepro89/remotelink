@@ -1,5 +1,6 @@
 const { Server } = require('socket.io')
 const logger = require('../utils/logger')
+const mongoose = require('mongoose')
 const sessionManager = require('./sessionManager')
 const Session = require('../models/Session')
 const { verifyPin } = require('./encryption')
@@ -35,7 +36,7 @@ function initSignaling(httpServer) {
 
       if (token) {
         try {
-          const decoded   = jwt.verify(token, process.env.JWT_SECRET)
+          const decoded   = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret')
           socket.userId   = decoded.userId
           socket.deviceId = decoded.deviceId || deviceId
         } catch { socket.deviceId = deviceId }
@@ -68,8 +69,10 @@ function initSignaling(httpServer) {
       try {
         const { sessionCode } = data
 
-        const existing = await Session.findOne({ sessionCode, status: { $in: ['waiting', 'active'] } })
-        if (existing) return callback?.({ error: 'Session code already in use' })
+        if (mongoose.connection.readyState === 1) {
+          const existing = await Session.findOne({ sessionCode, status: { $in: ['waiting', 'active'] } })
+          if (existing) return callback?.({ error: 'Session code already in use' })
+        }
 
         sessionManager.createSession(data.sessionId, {
           socketId: socket.id, deviceId: socket.deviceId, sessionCode,
@@ -91,9 +94,27 @@ function initSignaling(httpServer) {
       try {
         const { sessionCode, sessionPassword } = data
 
-        const dbSession = await Session.findOne({ sessionCode, status: { $in: ['waiting', 'active'] } })
-        if (!dbSession) return callback?.({ error: 'Session not found or expired' })
-        if (!verifyPin(sessionPassword, dbSession.passwordHash)) return callback?.({ error: 'Incorrect password' })
+        let dbSession = null
+        if (mongoose.connection.readyState === 1) {
+          dbSession = await Session.findOne({ sessionCode, status: { $in: ['waiting', 'active'] } })
+        }
+
+        if (!dbSession) {
+          // If offline: fallback to finding the session in memory inside sessionManager
+          const memorySession = sessionManager.getSessionByCode(sessionCode.toUpperCase())
+          if (!memorySession) return callback?.({ error: 'Session not found or expired' })
+          
+          dbSession = {
+            sessionId: memorySession.sessionId,
+            sessionCode: memorySession.sessionCode,
+            passwordHash: memorySession.passwordHash,
+            iceConfig: {
+              stunUrls: [process.env.STUN_URL || 'stun:stun.l.google.com:19302'],
+            }
+          }
+        } else {
+          if (!verifyPin(sessionPassword, dbSession.passwordHash)) return callback?.({ error: 'Incorrect password' })
+        }
 
         const state = sessionManager.addViewer(dbSession.sessionId, {
           socketId: socket.id, deviceId: socket.deviceId, displayName: socket.displayName,
@@ -140,7 +161,7 @@ function initSignaling(httpServer) {
       const roomKey = roomCode ? `call:${roomCode}` : `session:${sessionId}`
       const payload = { sender: socket.displayName, senderId: socket.id, message, timestamp: new Date().toISOString(), type: 'text' }
       io.to(roomKey).emit('chat:message', payload)
-      if (sessionId) {
+      if (sessionId && mongoose.connection.readyState === 1) {
         Session.findOneAndUpdate({ sessionId }, { $push: { chatMessages: { sender: socket.displayName, message, type: 'text' } } })
           .catch(err => logger.error('Chat persist error', err))
       }

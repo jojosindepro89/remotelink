@@ -133,10 +133,10 @@ export async function setStreamQuality(quality) {
   const params = sender.getParameters()
   if (!params.encodings?.[0]) return
   const presets = {
-    high:   { maxBitrate: 4_000_000, scaleResolutionDownBy: 1 },
+    high: { maxBitrate: 4_000_000, scaleResolutionDownBy: 1 },
     medium: { maxBitrate: 1_500_000, scaleResolutionDownBy: 1.5 },
-    low:    { maxBitrate:   500_000, scaleResolutionDownBy: 2.5 },
-    auto:   { maxBitrate: 4_000_000, scaleResolutionDownBy: 1 },
+    low: { maxBitrate: 500_000, scaleResolutionDownBy: 2.5 },
+    auto: { maxBitrate: 4_000_000, scaleResolutionDownBy: 1 },
   }
   params.encodings[0] = { ...params.encodings[0], ...presets[quality] }
   await sender.setParameters(params)
@@ -149,7 +149,7 @@ function setupDataChannel(channel, handlers = {}) {
     try {
       const data = JSON.parse(e.data)
       handlers.onControlEvent?.(data)
-    } catch {}
+    } catch { }
   }
 }
 

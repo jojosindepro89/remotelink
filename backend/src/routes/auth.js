@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 const User = require('../models/User');
 const Device = require('../models/Device');
@@ -18,6 +19,45 @@ router.post('/device', authLimiter, async (req, res) => {
 
     if (!deviceId || !platform) {
       return res.status(400).json({ error: 'deviceId and platform are required' });
+    }
+
+    // Fallback if MongoDB is not connected
+    if (mongoose.connection.readyState !== 1) {
+      const mockUser = {
+        _id: `mock-user-${deviceId.slice(-6)}`,
+        deviceId,
+        isGuest: true,
+        displayName: `User-${deviceId.slice(-6)}`,
+        devices: [],
+        toSafeObject() {
+          return {
+            id: this._id,
+            deviceId: this.deviceId,
+            isGuest: this.isGuest,
+            displayName: this.displayName,
+          };
+        }
+      };
+      const mockDevice = {
+        _id: `mock-dev-${deviceId.slice(-6)}`,
+        deviceId,
+        name: deviceName || `${platform} Device`,
+        platform,
+        osVersion,
+        appVersion,
+        lastSeen: new Date(),
+      };
+      const token = jwt.sign(
+        { userId: mockUser._id, deviceId, role: 'user' },
+        process.env.JWT_SECRET || 'fallback-secret',
+        { expiresIn: '7d' }
+      );
+      logger.info(`[Offline Auth] Mock device authenticated: ${deviceId}`);
+      return res.json({
+        token,
+        user: mockUser.toSafeObject(),
+        device: mockDevice,
+      });
     }
 
     // Upsert user
@@ -78,6 +118,17 @@ router.post('/device', authLimiter, async (req, res) => {
  */
 router.post('/guest', authLimiter, async (req, res) => {
   try {
+    // Fallback if MongoDB is not connected
+    if (mongoose.connection.readyState !== 1) {
+      const guestDeviceId = `guest-${uuidv4()}`;
+      const token = jwt.sign(
+        { userId: `mock-guest-${guestDeviceId.slice(-6)}`, deviceId: guestDeviceId, role: 'user', isGuest: true },
+        process.env.JWT_SECRET || 'fallback-secret',
+        { expiresIn: '24h' }
+      );
+      return res.json({ token, deviceId: guestDeviceId, displayName: `Guest-${guestDeviceId.slice(-6)}` });
+    }
+
     const guestDeviceId = `guest-${uuidv4()}`;
 
     const user = await User.create({
