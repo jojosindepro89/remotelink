@@ -1,5 +1,5 @@
 const express = require('express');
-const router = Router = express.Router();
+const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const mongoose = require('mongoose');
 const Session = require('../models/Session');
@@ -111,13 +111,12 @@ router.post('/join', optionalAuth, sessionLimiter, async (req, res) => {
     if (mongoose.connection.readyState !== 1) {
       const code = sessionCode.toUpperCase();
       // Try to find the session in sessionManager
-      const activeSessions = sessionManager.getActiveSessionsStats().sessions || [];
-      const foundSession = activeSessions.find(s => s.code === code);
+      const foundSession = sessionManager.getSessionByCode(code);
       if (foundSession) {
         return res.json({
           sessionId: foundSession.sessionId,
-          sessionCode: foundSession.code,
-          status: 'active',
+          sessionCode: foundSession.sessionCode,
+          status: foundSession.status,
           iceConfig: {
             stunUrls: [process.env.STUN_URL || 'stun:stun.l.google.com:19302'],
             turnUrl: process.env.TURN_URL || null,
