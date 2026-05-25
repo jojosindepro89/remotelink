@@ -6,32 +6,26 @@ import Session from './pages/Session'
 import Admin from './pages/Admin'
 import VideoCall from './pages/VideoCall'
 import useSessionStore from './store/sessionStore'
-import { authApi } from './lib/api'
-import { v4 as uuidv4 } from 'uuid'
 
 function App() {
-  const { isAuthenticated, setAuth, deviceId } = useSessionStore()
+  const { isAuthenticated, setAuth } = useSessionStore()
 
-  // Auto-authenticate as guest on first visit
+  // Auto-assign a stable guest deviceId — works offline, no API call needed
   useEffect(() => {
-    const init = async () => {
-      if (!isAuthenticated) {
-        try {
-          const storedDeviceId = localStorage.getItem('rl_device_id') || `web-${uuidv4()}`
-          localStorage.setItem('rl_device_id', storedDeviceId)
-
-          const res = await authApi.loginWithDevice({
-            deviceId: storedDeviceId,
-            platform: 'web',
-            deviceName: `Web Browser (${navigator.platform})`,
-          })
-          setAuth(res.token, res.user, storedDeviceId)
-        } catch (err) {
-          console.warn('Auto-auth failed, proceeding as guest:', err)
+    if (!isAuthenticated) {
+      try {
+        let deviceId = localStorage.getItem('rl_device_id')
+        if (!deviceId) {
+          deviceId = `web-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+          localStorage.setItem('rl_device_id', deviceId)
         }
+        // Set guest auth state without hitting the API — the backend will
+        // accept any deviceId as a guest when it's online
+        setAuth(null, { displayName: `Guest-${deviceId.slice(-4)}` }, deviceId)
+      } catch (err) {
+        console.warn('[App] Guest init failed:', err.message)
       }
     }
-    init()
   }, [isAuthenticated])
 
   return (
@@ -52,11 +46,11 @@ function App() {
         }}
       />
       <Routes>
-        <Route path="/" element={<Home />} />
+        <Route path="/"                 element={<Home />} />
         <Route path="/session/:sessionId" element={<Session />} />
-        <Route path="/call/:roomCode" element={<VideoCall />} />
-        <Route path="/admin" element={<Admin />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/call/:roomCode"   element={<VideoCall />} />
+        <Route path="/admin"            element={<Admin />} />
+        <Route path="*"                 element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )

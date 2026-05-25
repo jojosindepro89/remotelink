@@ -29,18 +29,24 @@ export function connectSignaling() {
   const WS_URL  = import.meta.env.VITE_WS_URL || 'http://localhost:3001'
   const deviceId = store.deviceId || getOrCreateDeviceId()
 
-  socket = io(WS_URL, {
-    auth: {
-      token:       store.token || undefined,   // omit if null
-      deviceId,
-      displayName: store.user?.displayName || `Web-${deviceId.slice(-6)}`,
-    },
-    transports:          ['websocket', 'polling'],
-    reconnectionAttempts: 10,
-    reconnectionDelay:    1000,
-    reconnectionDelayMax: 8000,
-    timeout:              10000,
-  })
+  try {
+    socket = io(WS_URL, {
+      auth: {
+        token:       store.token || undefined,
+        deviceId,
+        displayName: store.user?.displayName || `Web-${deviceId.slice(-6)}`,
+      },
+      transports:          ['websocket', 'polling'],
+      reconnectionAttempts: 5,
+      reconnectionDelay:    2000,
+      reconnectionDelayMax: 10000,
+      timeout:              8000,
+    })
+  } catch (err) {
+    console.warn('[Signaling] Could not create socket:', err.message)
+    // Return a dummy socket-like object so callers don't crash
+    return { connected: false, on: () => {}, off: () => {}, emit: () => {}, once: () => {}, removeAllListeners: () => {} }
+  }
 
   socket.on('connect', () => {
     console.log('[Signaling] Connected:', socket.id)
@@ -55,7 +61,7 @@ export function connectSignaling() {
   })
 
   socket.on('connect_error', (err) => {
-    console.error('[Signaling] Connection error:', err.message)
+    console.warn('[Signaling] Connection error (backend may be offline):', err.message)
     useSessionStore.getState().setConnectionStatus('error')
   })
 
