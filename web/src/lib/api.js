@@ -4,6 +4,9 @@ import useSessionStore from '../store/sessionStore'
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 15000,
+  headers: {
+    'Bypass-Tunnel-Reminder': 'true'
+  }
 })
 
 api.interceptors.request.use((config) => {
