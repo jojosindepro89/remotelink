@@ -31,9 +31,11 @@ const useSessionStore = create(
         clipboardSync: true,
         soundEnabled: true,
       },
+      customServerUrl: null,
 
       setAuth: (token, user, deviceId) => set({ token, user, deviceId, isAuthenticated: true }),
       clearAuth: () => set({ token: null, user: null, deviceId: null, isAuthenticated: false }),
+      setCustomServerUrl: (url) => set({ customServerUrl: url }),
 
       setActiveSession: (session) => set({ activeSession: session }),
       clearSession: () => set({ activeSession: null, connectionStatus: 'idle', isHost: false }),
@@ -70,6 +72,7 @@ const useSessionStore = create(
         isAuthenticated: state.isAuthenticated,
         sessionHistory: state.sessionHistory,
         settings: state.settings,
+        customServerUrl: state.customServerUrl,
       }),
     }
   )

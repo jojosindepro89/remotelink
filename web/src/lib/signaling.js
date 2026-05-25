@@ -26,7 +26,7 @@ export function connectSignaling() {
   }
 
   const store   = useSessionStore.getState()
-  const WS_URL  = import.meta.env.VITE_WS_URL || 'http://localhost:3001'
+  const WS_URL  = store.customServerUrl || import.meta.env.VITE_WS_URL || 'http://localhost:3001'
   const deviceId = store.deviceId || getOrCreateDeviceId()
 
   try {

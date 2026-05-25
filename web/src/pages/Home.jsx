@@ -27,10 +27,35 @@ function makeLocalRoomCode() {
 
 export default function Home() {
   const navigate = useNavigate()
-  const { sessionHistory, addToHistory, setActiveSession, setIsHost } = useSessionStore()
+  const { sessionHistory, addToHistory, setActiveSession, setIsHost, customServerUrl, setCustomServerUrl } = useSessionStore()
 
   const [joinCode,       setJoinCode]       = useState('')
   const [joinPassword,   setJoinPassword]   = useState('')
+  const [customUrlInput, setCustomUrlInput] = useState(customServerUrl || '')
+
+  const handleSaveCustomUrl = () => {
+    const cleanUrl = customUrlInput.trim()
+    if (!cleanUrl) {
+      setCustomServerUrl(null)
+      toast.success('Using default server URL')
+      window.location.reload()
+      return
+    }
+    if (!cleanUrl.startsWith('http://') && !cleanUrl.startsWith('https://')) {
+      toast.error('URL must start with http:// or https://')
+      return
+    }
+    setCustomServerUrl(cleanUrl)
+    toast.success('Custom server URL saved! Reloading...')
+    setTimeout(() => window.location.reload(), 1000)
+  }
+
+  const handleResetCustomUrl = () => {
+    setCustomServerUrl(null)
+    setCustomUrlInput('')
+    toast.success('Reset to default server URL! Reloading...')
+    setTimeout(() => window.location.reload(), 1000)
+  }
   const [isStarting,     setIsStarting]     = useState(false)
   const [isJoining,      setIsJoining]      = useState(false)
   const [isStartingCall, setIsStartingCall] = useState(false)
@@ -385,6 +410,43 @@ export default function Home() {
               </div>
             </div>
           )}
+
+          {/* ── Custom Server Settings ── */}
+          <div className="max-w-md mx-auto mb-16 p-6 glass rounded-2xl border border-white/6 text-center">
+            <h3 className="text-sm font-semibold text-slate-300 mb-2">Connection Settings</h3>
+            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+              If the default tunnel server is down, you can paste the active tunnel URL (e.g. from localtunnel or ngrok) below:
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="https://your-tunnel.loca.lt"
+                className="input text-xs flex-1"
+                style={{ padding: '8px 12px', height: '36px' }}
+                value={customUrlInput}
+                onChange={(e) => setCustomUrlInput(e.target.value)}
+              />
+              <button
+                onClick={handleSaveCustomUrl}
+                className="btn-primary text-xs px-4"
+                style={{ height: '36px', background: '#6366f1', color: 'white', borderRadius: '12px' }}
+              >
+                Save
+              </button>
+              {customServerUrl && (
+                <button
+                  onClick={handleResetCustomUrl}
+                  className="btn-ghost text-xs px-3 text-red-400 hover:text-red-300"
+                  style={{ height: '36px' }}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-600 mt-2">
+              Currently using: <code className="text-indigo-400">{customServerUrl || import.meta.env.VITE_WS_URL || 'http://localhost:3001'}</code>
+            </p>
+          </div>
 
           {/* ── Platforms ── */}
           <div className="text-center">

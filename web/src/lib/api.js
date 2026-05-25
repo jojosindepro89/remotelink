@@ -13,6 +13,13 @@ api.interceptors.request.use((config) => {
   const store = useSessionStore.getState()
   const headers = store.getAuthHeaders()
   Object.assign(config.headers, headers)
+
+  // Dynamically rewrite baseURL if custom server URL is set
+  if (store.customServerUrl) {
+    const base = store.customServerUrl.replace(/\/$/, '')
+    config.baseURL = base.endsWith('/api') ? base : `${base}/api`
+  }
+
   return config
 })
 
