@@ -1,0 +1,17 @@
+{
+  "name": "remotelink-monorepo",
+  "version": "1.0.0",
+  "description": "RemoteLink Monorepo — Cross-platform remote desktop and screen sharing",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix desktop",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:web": "npm run dev --prefix web",
+    "dev:desktop": "npm run dev --prefix desktop",
+    "dev:all": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix web\" \"npm run dev --prefix desktop\"",
+    "install:all": "npm install --prefix backend && npm install --prefix web && npm install --prefix desktop && npm install --prefix mobile"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
