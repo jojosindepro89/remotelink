@@ -164,6 +164,50 @@ export async function replaceVideoTrack(newStream) {
   if (newTrack) await sender.replaceTrack(newTrack)
 }
 
+/**
+ * Add a new screen-share stream to an EXISTING peer connection and
+ * trigger renegotiation. Used when the viewer (or host) wants to also
+ * share their screen back, enabling bidirectional viewing.
+ *
+ * Returns the captured MediaStream so the caller can stop it later.
+ */
+export async function shareReverseScreen(remoteSocketId, sessionId, options = {}) {
+  if (!peerConnection) throw new Error('No peer connection')
+
+  const stream = await captureScreen(options)
+
+  // Tag this stream so the other side can identify it as the reverse direction
+  stream.getTracks().forEach(track => {
+    peerConnection.addTrack(track, stream)
+  })
+
+  // Trigger renegotiation: create new offer, send to remote
+  const offer = await peerConnection.createOffer()
+  await peerConnection.setLocalDescription(offer)
+  const socket = getSocket()
+  socket.emit('webrtc:offer', { targetSocketId: remoteSocketId, offer, sessionId })
+
+  return stream
+}
+
+/**
+ * Stop a reverse-share stream and renegotiate.
+ */
+export async function stopReverseScreen(stream, remoteSocketId, sessionId) {
+  if (!peerConnection || !stream) return
+  const senders = peerConnection.getSenders()
+  stream.getTracks().forEach(track => {
+    track.stop()
+    const sender = senders.find(s => s.track === track)
+    if (sender) peerConnection.removeTrack(sender)
+  })
+  // Renegotiate
+  const offer = await peerConnection.createOffer()
+  await peerConnection.setLocalDescription(offer)
+  const socket = getSocket()
+  socket.emit('webrtc:offer', { targetSocketId: remoteSocketId, offer, sessionId })
+}
+
 // ── Signaling ──────────────────────────────────────────────────
 
 /**

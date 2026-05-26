@@ -12,7 +12,7 @@ import {
   createPeerConnection, captureScreen, captureMicrophone,
   createOffer, handleOffer, handleAnswer, addIceCandidate,
   addStreamToPeer, sendControlEvent, setStreamQuality, closePeerConnection,
-  getLocalStream
+  getLocalStream, shareReverseScreen, stopReverseScreen, canShareScreen
 } from '../lib/webrtc'
 import { getIceConfig } from '../lib/api'
 import Chat from '../components/Chat'
@@ -49,6 +49,11 @@ export default function Session() {
   const [chatMessages,    setChatMessages]    = useState([])
   const [copied,          setCopied]          = useState(false)
   const [linkCopied,      setLinkCopied]      = useState(false)
+  const [reverseStream,   setReverseStream]   = useState(null)   // local stream when we share back
+  const [secondaryStream, setSecondaryStream] = useState(null)   // remote stream when peer shares back
+  const [isReversing,     setIsReversing]     = useState(false)
+  const secondaryVideoRef = useRef(null)
+  const firstStreamIdRef  = useRef(null)
   const [isScreenSharing, setIsScreenSharing] = useState(false)
   const [remotePointer,   setRemotePointer]   = useState(null)  // { x, y } 0-1
   const [showQuality,     setShowQuality]     = useState(false)
@@ -92,17 +97,24 @@ export default function Session() {
           onRemoteStream: (stream) => {
             if (!mounted) return
             setConnectionState('connected')
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream
-              videoRef.current.play().catch(() => {})
-            }
-            // Read remote resolution from video metadata
-            videoRef.current?.addEventListener('loadedmetadata', () => {
-              remoteResRef.current = {
-                w: videoRef.current.videoWidth  || 1920,
-                h: videoRef.current.videoHeight || 1080,
+
+            // Track first stream as primary, anything new as secondary (reverse share)
+            if (!firstStreamIdRef.current) {
+              firstStreamIdRef.current = stream.id
+              if (videoRef.current) {
+                videoRef.current.srcObject = stream
+                videoRef.current.play().catch(() => {})
               }
-            }, { once: true })
+              videoRef.current?.addEventListener('loadedmetadata', () => {
+                remoteResRef.current = {
+                  w: videoRef.current.videoWidth  || 1920,
+                  h: videoRef.current.videoHeight || 1080,
+                }
+              }, { once: true })
+            } else if (stream.id !== firstStreamIdRef.current) {
+              setSecondaryStream(stream)
+              toast.success('Peer is sharing their screen too', { icon: '🖥️' })
+            }
           },
           onStateChange: (state) => {
             if (!mounted) return
@@ -160,10 +172,6 @@ export default function Session() {
             }
           })
 
-          socket.on('webrtc:answer', async ({ answer }) => {
-            try { await handleAnswer(answer) } catch (e) { console.error(e) }
-          })
-
           // Broadcast cursor position to viewer every 50ms
           let cursorInterval = null
           if (typeof window.__electron !== 'undefined') {
@@ -193,18 +201,23 @@ export default function Session() {
 
           hostSocketIdRef.current = joinRes.hostSocketId
           toast('Waiting for host to share screen…', { icon: '🖥️' })
-
-          // Receive screen stream via WebRTC offer
-          socket.on('webrtc:offer', async ({ fromSocketId, offer }) => {
-            if (!mounted) return
-            hostSocketIdRef.current = fromSocketId
-            try {
-              await handleOffer(offer, fromSocketId, sessionId)
-            } catch (err) { console.error('handleOffer error:', err) }
-          })
         }
 
         // ── Shared Handlers ──────────────────────────────────
+        // Both sides handle offers/answers so either can initiate renegotiation
+        socket.on('webrtc:offer', async ({ fromSocketId, offer }) => {
+          if (!mounted) return
+          if (isHost) viewerSocketIdRef.current = fromSocketId
+          else hostSocketIdRef.current = fromSocketId
+          try {
+            await handleOffer(offer, fromSocketId, sessionId)
+          } catch (err) { console.error('handleOffer error:', err) }
+        })
+
+        socket.on('webrtc:answer', async ({ answer }) => {
+          try { await handleAnswer(answer) } catch (e) { console.error(e) }
+        })
+
         socket.on('webrtc:ice', async ({ candidate }) => {
           await addIceCandidate(candidate)
         })
@@ -263,6 +276,47 @@ export default function Session() {
       }
     }
   }, [sessionId, isHost])
+
+  // Bind secondary remote stream to its <video>
+  useEffect(() => {
+    if (secondaryVideoRef.current && secondaryStream) {
+      secondaryVideoRef.current.srcObject = secondaryStream
+      secondaryVideoRef.current.play().catch(() => {})
+    }
+  }, [secondaryStream])
+
+  // ── Toggle: Share my screen back ─────────────────────────────
+  const handleToggleReverseShare = async () => {
+    if (!canShareScreen()) {
+      toast.error('Screen sharing not available on this device')
+      return
+    }
+    const remoteId = isHost ? viewerSocketIdRef.current : hostSocketIdRef.current
+    if (!remoteId) {
+      toast.error('Peer not connected yet')
+      return
+    }
+    try {
+      if (reverseStream) {
+        // Stop sharing
+        await stopReverseScreen(reverseStream, remoteId, sessionId)
+        setReverseStream(null)
+        toast('Stopped sharing your screen')
+      } else {
+        setIsReversing(true)
+        const stream = await shareReverseScreen(remoteId, sessionId, {
+          includeAudio: false,
+          onScreenShareStop: () => setReverseStream(null),
+        })
+        setReverseStream(stream)
+        toast.success('Sharing your screen', { icon: '🖥️' })
+      }
+    } catch (err) {
+      toast.error(err.message || 'Could not share screen')
+    } finally {
+      setIsReversing(false)
+    }
+  }
 
   // ── Fullscreen ───────────────────────────────────────────────
   useEffect(() => {
@@ -605,6 +659,16 @@ export default function Session() {
           >
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
+
+          {/* Picture-in-picture for peer's reverse-share stream */}
+          {secondaryStream && (
+            <div style={{ position:'absolute', bottom:16, right:16, width:260, height:160, borderRadius:12, overflow:'hidden', border:'2px solid rgba(99,102,241,0.5)', boxShadow:'0 8px 24px rgba(0,0,0,0.6)', background:'#000', zIndex:35 }}>
+              <video ref={secondaryVideoRef} autoPlay playsInline muted style={{ width:'100%', height:'100%', objectFit:'contain' }} />
+              <div style={{ position:'absolute', top:6, left:8, fontSize:10, fontWeight:600, color:'white', background:'rgba(0,0,0,0.5)', padding:'2px 8px', borderRadius:6 }}>
+                {isHost ? 'Viewer\'s screen' : 'Host\'s screen'}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Chat panel */}
@@ -680,6 +744,18 @@ export default function Session() {
           onClick={() => { setShowFiles(p => !p); setShowChat(false) }}
         />
 
+        {/* Share screen back (bidirectional) */}
+        {canShareScreen() && (
+          <ToolbarBtn
+            id="btn-share-back"
+            icon={<Monitor size={14} />}
+            label={reverseStream ? 'Stop sharing' : 'Share my screen'}
+            active={!!reverseStream}
+            onClick={handleToggleReverseShare}
+            disabled={isReversing}
+          />
+        )}
+
         <div style={{ width:1, height:24, background:'rgba(255,255,255,0.1)' }} />
 
         {/* End */}
@@ -693,15 +769,16 @@ export default function Session() {
   )
 }
 
-function ToolbarBtn({ id, icon, label, onClick, active = false, badge = 0 }) {
+function ToolbarBtn({ id, icon, label, onClick, active = false, badge = 0, disabled = false }) {
   return (
     <div style={{ position:'relative' }}>
-      <button id={id} onClick={onClick} style={{
+      <button id={id} onClick={onClick} disabled={disabled} style={{
         display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:10,
-        fontSize:12, fontWeight:500, cursor:'pointer', border:'1px solid',
+        fontSize:12, fontWeight:500, cursor: disabled ? 'not-allowed' : 'pointer', border:'1px solid',
         background: active ? 'rgba(99,102,241,0.2)' : 'rgba(255,255,255,0.05)',
         borderColor: active ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.1)',
         color: active ? '#a5b4fc' : '#94a3b8',
+        opacity: disabled ? 0.5 : 1,
         transition: 'all 0.15s',
       }}>
         {icon} <span style={{ display:'none' }} className="sm:inline">{label}</span>
