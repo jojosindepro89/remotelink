@@ -24,6 +24,19 @@ export default function Admin() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [analyticsRange, setAnalyticsRange] = useState(7)
+  const [accessError, setAccessError] = useState(null)
+  const [idCopied, setIdCopied] = useState(false)
+  const deviceId = typeof window !== 'undefined' ? localStorage.getItem('rl_device_id') : null
+
+  const copyDeviceId = async () => {
+    if (!deviceId) return
+    try {
+      await navigator.clipboard.writeText(deviceId)
+      setIdCopied(true)
+      toast.success('Device ID copied!')
+      setTimeout(() => setIdCopied(false), 2000)
+    } catch { toast.error('Could not copy') }
+  }
 
   useEffect(() => { loadStats() }, [])
   useEffect(() => { if (tab === 'analytics') loadAnalytics() }, [tab, analyticsRange])
@@ -52,8 +65,14 @@ export default function Admin() {
     try {
       const data = await adminApi.getStats()
       setStats(data)
+      setAccessError(null)
     } catch (err) {
-      toast.error('Failed to load stats — check admin credentials')
+      const status = err?.status || err?.response?.status
+      if (status === 401 || status === 403 || err?.error?.includes('Admin')) {
+        setAccessError(err?.error || 'Admin access required')
+      } else {
+        toast.error('Failed to load stats')
+      }
     } finally {
       setLoading(false)
     }
@@ -139,6 +158,36 @@ export default function Admin() {
       </header>
 
       <div className="pt-20 pb-10 px-6 max-w-7xl mx-auto">
+        {/* ── Access Error Banner ── */}
+        {accessError && (
+          <div className="mb-6 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                <Settings size={16} className="text-amber-300" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-sm font-bold text-amber-200 mb-1">Admin access required</h3>
+                <p className="text-xs text-amber-100/70 mb-3 leading-relaxed">
+                  To grant yourself admin access, add your device ID to the <code className="text-amber-300 bg-amber-900/30 px-1 rounded">ADMIN_DEVICE_IDS</code> environment variable on Render, then redeploy the backend.
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <code className="text-xs font-mono text-emerald-300 bg-black/30 px-3 py-1.5 rounded-lg border border-emerald-500/20 break-all">
+                    {deviceId || '(no device id found)'}
+                  </code>
+                  {deviceId && (
+                    <button
+                      onClick={copyDeviceId}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 transition-colors font-semibold"
+                    >
+                      {idCopied ? '✓ Copied' : 'Copy device ID'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Tab Nav ── */}
         <nav className="flex gap-1 glass rounded-2xl p-1 mb-8">
           {TABS.map(({ id, icon: Icon, label }) => (
