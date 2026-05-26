@@ -25,12 +25,9 @@ services:
         value: https://remotelink-eosin.vercel.app
       - key: STUN_URL
         value: stun:stun.l.google.com:19302
+      # MONGODB_URI must be configured manually in the Render dashboard.
+      # Render doesn't offer managed MongoDB — use MongoDB Atlas free tier
+      # (512MB) and paste the connection string. Format:
+      # mongodb+srv://<user>:<pass>@<cluster>.mongodb.net/remotelink?retryWrites=true
       - key: MONGODB_URI
-        fromDatabase:
-          name: remotelink-db
-          property: connectionString
-
-databases:
-  - name: remotelink-db
-    databaseName: remotelink
-    plan: free
+        sync: false
