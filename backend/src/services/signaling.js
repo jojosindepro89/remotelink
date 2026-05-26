@@ -78,6 +78,22 @@ function initSignaling(httpServer) {
       try {
         const { sessionCode } = data
 
+        // First: if this device has a session in grace-period reconnect, restore it
+        const reclaimed = sessionManager.reclaimHostSession(socket.deviceId, socket.id)
+        if (reclaimed) {
+          socket.join(`session:${reclaimed.sessionId}`)
+          socket.sessionId = reclaimed.sessionId
+          socket.role      = 'host'
+          // Notify any waiting viewers so WebRTC can resume
+          for (const [viewerSocketId, viewer] of reclaimed.viewers) {
+            io.to(socket.id).emit('viewer:joined', {
+              viewerSocketId, deviceId: viewer.deviceId, displayName: viewer.displayName,
+            })
+          }
+          logger.info(`Host re-joined session ${reclaimed.sessionId} — ${reclaimed.viewers.size} viewer(s) re-attached`)
+          return callback?.({ success: true, sessionId: reclaimed.sessionId, reclaimed: true })
+        }
+
         if (mongoose.connection.readyState === 1) {
           const existing = await Session.findOne({ sessionCode, status: { $in: ['waiting', 'active'] } })
           if (existing) return callback?.({ error: 'Session code already in use' })
@@ -134,12 +150,21 @@ function initSignaling(httpServer) {
         socket.sessionId = dbSession.sessionId
         socket.role      = 'viewer'
 
-        io.to(state.hostSocketId).emit('viewer:joined', {
-          viewerSocketId: socket.id, deviceId: socket.deviceId, displayName: socket.displayName,
-        })
+        // Only notify host if they're currently connected
+        if (state.status !== 'host_disconnected' && state.hostSocketId) {
+          io.to(state.hostSocketId).emit('viewer:joined', {
+            viewerSocketId: socket.id, deviceId: socket.deviceId, displayName: socket.displayName,
+          })
+        }
 
         logger.info(`Viewer joined session ${dbSession.sessionId}`)
-        callback?.({ success: true, sessionId: dbSession.sessionId, hostSocketId: state.hostSocketId, iceConfig: dbSession.iceConfig })
+        callback?.({
+          success: true,
+          sessionId: dbSession.sessionId,
+          hostSocketId: state.hostSocketId,
+          hostStatus: state.status,
+          iceConfig: dbSession.iceConfig
+        })
       } catch (err) {
         logger.error('session:join error', err)
         callback?.({ error: err.message })

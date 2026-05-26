@@ -77,9 +77,21 @@ class SessionManager {
 
     if (session.hostSocketId === socketId) {
       role = 'host';
-      session.status = 'ended';
+      // Don't end immediately — give 60s grace period for host to reconnect.
+      // Browser tab switches, brief network blips, and Vercel cold-renders
+      // can drop the WS for several seconds without the host actually leaving.
+      session.hostDisconnectedAt = Date.now();
+      session.status = 'host_disconnected';
       this._clearTimeout(sessionId);
-      logger.info(`Host disconnected from session ${sessionId}`);
+      this.timeouts.set(sessionId, setTimeout(() => {
+        const s = this.activeSessions.get(sessionId);
+        if (s && s.status === 'host_disconnected') {
+          logger.info(`Host did not reconnect to session ${sessionId} within grace period — ending`);
+          s.status = 'ended';
+          setTimeout(() => this.activeSessions.delete(sessionId), 30000);
+        }
+      }, 60000));
+      logger.info(`Host disconnected from session ${sessionId} (60s grace period started)`);
     } else if (session.viewers.has(socketId)) {
       role = 'viewer';
       session.viewers.delete(socketId);
@@ -95,8 +107,33 @@ class SessionManager {
   }
 
   getSessionByCode(code) {
+    const upperCode = (code || '').toUpperCase();
     for (const [, session] of this.activeSessions) {
-      if (session.sessionCode === code && session.status !== 'ended') {
+      const sessionCodeUpper = (session.sessionCode || '').toUpperCase();
+      if (sessionCodeUpper === upperCode && session.status !== 'ended') {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Reclaim a session for a host that has reconnected with a new socket.
+   * Looks up by deviceId — if the host's previous session is in grace
+   * period, swap in the new socket and resume.
+   */
+  reclaimHostSession(deviceId, newSocketId) {
+    for (const [sessionId, session] of this.activeSessions) {
+      if (session.hostDeviceId === deviceId && session.status === 'host_disconnected') {
+        // Remove old socket binding, attach new one
+        this.socketToSession.delete(session.hostSocketId);
+        session.hostSocketId = newSocketId;
+        session.status = session.viewers.size > 0 ? 'active' : 'waiting';
+        session.hostDisconnectedAt = null;
+        this.socketToSession.set(newSocketId, sessionId);
+        this.deviceToSocket.set(deviceId, newSocketId);
+        this._clearTimeout(sessionId);
+        logger.info(`Host reclaimed session ${sessionId} via deviceId ${deviceId}`);
         return session;
       }
     }
