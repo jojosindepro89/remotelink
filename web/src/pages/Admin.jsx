@@ -31,6 +31,23 @@ export default function Admin() {
   useEffect(() => { if (tab === 'users') loadUsers() }, [tab])
   useEffect(() => { if (tab === 'logs') loadLogs() }, [tab])
 
+  // ── Auto-refresh active tab every 5 seconds for real-time data ─
+  useEffect(() => {
+    const refreshers = {
+      overview:  loadStats,
+      sessions:  loadSessions,
+      users:     loadUsers,
+      logs:      loadLogs,
+      analytics: loadAnalytics,
+    }
+    const fn = refreshers[tab]
+    if (!fn) return
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fn()
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [tab, analyticsRange])
+
   const loadStats = async () => {
     try {
       const data = await adminApi.getStats()
@@ -109,9 +126,15 @@ export default function Admin() {
             </div>
             <span className="font-bold text-lg">Admin Panel</span>
           </div>
-          <button onClick={loadStats} className="btn-ghost text-sm px-3 py-1.5">
-            <RefreshCw size={14} /> Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-xs text-emerald-400" title="Auto-refreshing every 5 seconds">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live
+            </div>
+            <button onClick={loadStats} className="btn-ghost text-sm px-3 py-1.5">
+              <RefreshCw size={14} /> Refresh
+            </button>
+          </div>
         </div>
       </header>
 

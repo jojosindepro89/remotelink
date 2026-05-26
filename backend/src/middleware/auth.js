@@ -86,12 +86,22 @@ const authenticate = async (req, res, next) => {
 
 /**
  * Admin-only access middleware
+ * Accepts users with role === 'admin' OR whose deviceId matches
+ * the comma-separated ADMIN_DEVICE_IDS env var (useful for owner access
+ * without seeding a DB admin user).
  */
 const requireAdmin = (req, res, next) => {
-  if (!req.user || req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
   }
-  next();
+  if (req.user.role === 'admin') return next();
+
+  const allowed = (process.env.ADMIN_DEVICE_IDS || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  if (allowed.length && req.deviceId && allowed.includes(req.deviceId)) {
+    return next();
+  }
+  return res.status(403).json({ error: 'Admin access required' });
 };
 
 /**
