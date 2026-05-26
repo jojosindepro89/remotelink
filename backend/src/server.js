@@ -86,7 +86,18 @@ app.get('/api/ice-config', async (req, res) => {
   let iceServers = [
     { urls: process.env.STUN_URL || 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' }
+    { urls: 'stun:stun2.l.google.com:19302' },
+    // ── Free public TURN (Open Relay Project) for NAT traversal ──
+    // Used when peers are behind strict NATs and STUN alone fails.
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ];
 
   const sid = process.env.TWILIO_ACCOUNT_SID;
