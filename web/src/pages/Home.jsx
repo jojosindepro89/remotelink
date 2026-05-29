@@ -93,7 +93,7 @@ export default function Home() {
           const socket = getSocket()
           if (socket?.connected) {
             await new Promise((res, rej) => {
-              const t = setTimeout(() => rej(new Error('timeout')), 5000)
+              const t = setTimeout(() => rej(new Error('timeout')), 120000)
               socket.emit('session:create', { sessionId, sessionCode, passwordHash: password }, (r) => {
                 clearTimeout(t)
                 r?.error ? rej(new Error(r.error)) : res(r)
