@@ -12,14 +12,20 @@
       "resizeMode": "contain",
       "backgroundColor": "#0d0d14"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.remotelink.mobile",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "RemoteLink uses the microphone for voice chat during remote sessions.",
         "NSCameraUsageDescription": "RemoteLink may use the camera for video sharing.",
-        "UIBackgroundModes": ["audio", "fetch", "remote-notification"],
+        "UIBackgroundModes": [
+          "audio",
+          "fetch",
+          "remote-notification"
+        ],
         "NSLocalNetworkUsageDescription": "RemoteLink uses local network for direct P2P connections."
       }
     },
@@ -40,19 +46,13 @@
       ]
     },
     "plugins": [
-      "expo-notifications",
-      [
-        "react-native-webrtc",
-        {
-          "cameraPermission": "RemoteLink uses the camera for video sharing.",
-          "microphonePermission": "RemoteLink uses the microphone for voice chat."
-        }
-      ]
+      "expo-notifications"
     ],
     "extra": {
       "eas": {
-        "projectId": "your-eas-project-id"
+        "projectId": "92877321-5b05-4fa2-883e-602346f6762e"
       }
-    }
+    },
+    "owner": "jbassey"
   }
 }

@@ -63,3 +63,5 @@ backend/test-video-call.js
 .cache/
 .parcel-cache/
 .turbo/
+.vercel
+web/public/RemoteLink.apk
