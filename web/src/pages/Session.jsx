@@ -80,7 +80,7 @@ export default function Session() {
           await new Promise((res, rej) => {
             socket.once('connect', res)
             socket.once('connect_error', rej)
-            setTimeout(() => rej(new Error('Socket timeout')), 8000)
+            setTimeout(() => rej(new Error('Socket timeout — backend may be cold-starting')), 30000)
           })
         }
 
@@ -187,7 +187,7 @@ export default function Session() {
           let joinRes
           try {
             joinRes = await new Promise((res, rej) => {
-              const t = setTimeout(() => rej(new Error('Join timeout')), 8000)
+              const t = setTimeout(() => rej(new Error('Join timeout — host may not have connected yet')), 30000)
               socket.emit('session:join', { sessionCode, sessionPassword }, (r) => {
                 clearTimeout(t)
                 r?.error ? rej(new Error(r.error)) : res(r)
