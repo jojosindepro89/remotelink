@@ -94,7 +94,7 @@ export default function SessionScreen({ navigation, route }) {
             }, (res) => {
               if (res?.error) reject(new Error(res.error)); else { setHostSocketId(res.hostSocketId); resolve(res) }
             })
-            setTimeout(() => reject(new Error('Timeout')), 8000)
+            setTimeout(() => reject(new Error('Timeout — backend may be cold-starting')), 120000)
           })
 
           socket.on('webrtc:offer', async ({ fromSocketId, offer }) => {
