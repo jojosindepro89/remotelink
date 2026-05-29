@@ -26,7 +26,7 @@ const useMobileStore = create(
         clipboardSync: true,
         vibration: true,
         keepScreenOn: true,
-        serverUrl: 'http://localhost:3001',
+        serverUrl: 'https://remotelink-backend.onrender.com',
       },
 
       setAuth: (token, user, deviceId) => set({ token, user, deviceId, isAuthenticated: true }),

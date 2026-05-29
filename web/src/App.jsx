@@ -6,6 +6,7 @@ import Session from './pages/Session'
 import Admin from './pages/Admin'
 import VideoCall from './pages/VideoCall'
 import JoinLink from './pages/JoinLink'
+import Download from './pages/Download'
 import useSessionStore from './store/sessionStore'
 
 function App() {
@@ -51,6 +52,7 @@ function App() {
         <Route path="/session/:sessionId" element={<Session />} />
         <Route path="/call/:roomCode"   element={<VideoCall />} />
         <Route path="/j/:code/:pass?"   element={<JoinLink />} />
+        <Route path="/download"         element={<Download />} />
         <Route path="/admin"            element={<Admin />} />
         <Route path="*"                 element={<Navigate to="/" replace />} />
       </Routes>

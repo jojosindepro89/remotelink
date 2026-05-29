@@ -21,6 +21,14 @@ export default function JoinLink() {
       return
     }
 
+    // Android visitors get the APK download flow first
+    const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '')
+    if (isAndroid && !searchParams.get('web')) {
+      const url = `/download?code=${code}${password ? `&pass=${encodeURIComponent(password)}` : ''}`
+      navigate(url, { replace: true })
+      return
+    }
+
     let cancelled = false
     const run = async () => {
       try {
