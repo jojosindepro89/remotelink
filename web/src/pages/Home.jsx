@@ -213,6 +213,14 @@ export default function Home() {
               {wsStatus === 'connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
               {wsStatus === 'connected' ? 'Online' : wsStatus === 'error' ? 'Offline' : 'Connecting…'}
             </div>
+            <a
+              href="/RemoteLink.apk"
+              download
+              className="hidden sm:flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 transition-colors font-semibold"
+              title="Download the Android app (APK)"
+            >
+              <Smartphone size={14} /> Android APK
+            </a>
             <button
               onClick={() => navigate('/admin')}
               className="btn-ghost text-sm px-3 py-1.5"

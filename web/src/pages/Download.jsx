@@ -109,7 +109,7 @@ export default function Download() {
             </div>
           )}
 
-          {/* DESKTOP — just take them to the web app */}
+          {/* DESKTOP — browser flow + visible APK download */}
           {platform === 'desktop' && (
             <div className="glass rounded-3xl p-8 mb-4">
               <div className="w-14 h-14 mx-auto rounded-2xl bg-brand-500/15 border border-brand-500/30 flex items-center justify-center mb-4">
@@ -119,15 +119,21 @@ export default function Download() {
               <p className="text-sm text-slate-400 text-center mb-6 leading-relaxed">
                 On desktop, RemoteLink runs directly in your browser — no install needed.
               </p>
-              <button onClick={handleWebJoin} className="btn-primary w-full py-3 text-sm">
+              <button onClick={handleWebJoin} className="btn-primary w-full py-3 text-sm mb-3">
                 Join session <ArrowRight size={16} />
               </button>
-              <div className="mt-5 pt-5 border-t border-white/5 text-xs text-slate-500">
-                <div className="flex items-center gap-2 mb-2">
-                  <Smartphone size={12} /> <b>Have an Android phone?</b>
-                </div>
-                Open this same link on Android to install the mobile app.
-              </div>
+              <a
+                href={APK_URL}
+                download
+                className="block w-full py-3 text-sm rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 transition-colors font-semibold text-center"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <DownloadIcon size={16} /> Download Android APK
+                </span>
+              </a>
+              <p className="text-xs text-slate-500 text-center mt-3">
+                Transfer the file to your Android phone to install the mobile app.
+              </p>
             </div>
           )}
 
