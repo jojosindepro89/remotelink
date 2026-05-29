@@ -14,6 +14,7 @@ import {
 } from '../hooks/useWebRTC'
 import useMobileStore from '../hooks/useSession'
 import { colors } from '../theme/colors'
+import * as RemoteControl from '../lib/remoteControl'
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window')
 
@@ -75,11 +76,36 @@ export default function SessionScreen({ navigation, route }) {
             setConnectionState('connected')
           },
           onStateChange: setConnectionState,
+          onControlEvent: async (event) => {
+            // Only the HOST executes incoming control events (the viewer
+            // sent them; the host is the one whose phone gets controlled).
+            if (!isHost) return
+            const enabled = await RemoteControl.isEnabled()
+            if (!enabled) return
+            await RemoteControl.executeIncomingEvent(event, SCREEN_W, SCREEN_H)
+          },
         })
 
         if (isHost) {
           const stream = await getMobileScreenStream()
           addStreamToPeer(stream)
+
+          // Prompt for accessibility on first session — required for remote
+          // control of this phone. Skipping is OK; the viewer just sees the
+          // screen without being able to tap.
+          if (Platform.OS === 'android') {
+            const enabled = await RemoteControl.isEnabled()
+            if (!enabled) {
+              Alert.alert(
+                'Allow remote control?',
+                'To let the connected device tap and swipe on your phone, enable RemoteLink in Accessibility Settings. Skip to share view-only.',
+                [
+                  { text: 'Skip (view-only)', style: 'cancel' },
+                  { text: 'Open Settings', onPress: () => RemoteControl.openAccessibilitySettings() },
+                ]
+              )
+            }
+          }
 
           socket.on('viewer:joined', async ({ viewerSocketId: vsId }) => {
             setViewerSocketId(vsId)

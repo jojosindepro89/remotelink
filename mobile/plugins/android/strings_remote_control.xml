@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="remote_control_service_description">RemoteLink uses this service to receive remote taps, swipes, and gestures from a connected device during an authorized remote-support session.</string>
+  <string name="remote_control_service_summary">Allow remote control during active RemoteLink sessions</string>
+</resources>

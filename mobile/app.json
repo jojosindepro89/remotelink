@@ -46,7 +46,8 @@
       ]
     },
     "plugins": [
-      "expo-notifications"
+      "expo-notifications",
+      "./plugins/withRemoteControl.js"
     ],
     "extra": {
       "eas": {

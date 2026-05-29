@@ -9,6 +9,7 @@ import {
 let peerConnection = null
 let localStream = null
 let dataChannel = null
+let controlHandlers = {}
 
 const ICE_DEFAULTS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -20,6 +21,7 @@ export function getDataChannel() { return dataChannel }
 export function getLocalStream() { return localStream }
 
 export function createPeerConnection(iceConfig, handlers = {}) {
+  controlHandlers = handlers
   const iceServers = iceConfig?.iceServers || ICE_DEFAULTS
 
   peerConnection = new RTCPeerConnection({ iceServers })
@@ -83,7 +85,7 @@ export async function getMobileScreenStream() {
 
 export async function createOffer(targetSocketId, sessionId, socket) {
   dataChannel = peerConnection.createDataChannel('control', { ordered: true })
-  setupDataChannel(dataChannel, {})
+  setupDataChannel(dataChannel, controlHandlers)
 
   const offer = await peerConnection.createOffer({ offerToReceiveVideo: false, offerToReceiveAudio: false })
   await peerConnection.setLocalDescription(offer)
