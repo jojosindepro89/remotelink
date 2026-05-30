@@ -49,7 +49,17 @@ export async function pressRecents() { return isAvailable ? RemoteControl.pressR
  *
  * The event's x/y are normalized to [0..1] of the host's screen.
  * We multiply by `screenWidth`/`screenHeight` to get actual pixels.
+ *
+ * Event vocabulary the desktop produces (web/src/pages/Session.jsx):
+ *   mousemove, mousedown, mouseup, click, dblclick, scroll, keydown, keyup
+ * Plus virtual events from the future mobile-driven viewer:
+ *   tap, longpress, swipe, home, back, recents
  */
+
+// Track pointer state so we can synthesize swipes from mousedown→mousemove→mouseup
+let pointerDown = null  // { x, y, t }
+const DRAG_THRESHOLD_PX = 12  // movement to consider it a drag vs. click
+
 export async function executeIncomingEvent(event, screenWidth, screenHeight) {
   if (!isAvailable) return
   if (!event || typeof event !== 'object') return
@@ -57,12 +67,32 @@ export async function executeIncomingEvent(event, screenWidth, screenHeight) {
   const py = (event.y ?? 0) * screenHeight
 
   switch (event.type) {
-    case 'mouseclick':
-    case 'tap':
-      return tap(px, py)
-    case 'longpress':
+    // ── Desktop-style mouse events ─────────────────────────────
+    case 'mousedown':
+      pointerDown = { x: px, y: py, t: Date.now() }
+      return
+    case 'mouseup': {
+      if (!pointerDown) return tap(px, py)
+      const dx = px - pointerDown.x
+      const dy = py - pointerDown.y
+      const dist = Math.hypot(dx, dy)
+      const dt = Date.now() - pointerDown.t
+      const start = pointerDown
+      pointerDown = null
+      if (dist > DRAG_THRESHOLD_PX) {
+        // Real drag — synthesize a swipe
+        return swipe(start.x, start.y, px, py, Math.max(120, Math.min(dt, 1200)))
+      }
+      if (dt > 600) return longPress(start.x, start.y)
+      return tap(start.x, start.y)
+    }
+    case 'click':       return tap(px, py)
+    case 'dblclick':    { await tap(px, py); return tap(px, py) }
     case 'rightclick':
-      return longPress(px, py)
+    case 'longpress':   return longPress(px, py)
+
+    // ── Native tap/swipe (for future use from mobile viewers) ──
+    case 'tap':         return tap(px, py)
     case 'swipe':
       return swipe(
         (event.x1 ?? event.x ?? 0) * screenWidth,
@@ -71,12 +101,20 @@ export async function executeIncomingEvent(event, screenWidth, screenHeight) {
         (event.y2 ?? event.y ?? 0) * screenHeight,
         event.durationMs || 300
       )
+
+    // ── Hardware buttons ───────────────────────────────────────
     case 'home':    return pressHome()
     case 'back':    return pressBack()
     case 'recents': return pressRecents()
-    // We don't act on mousemove on Android — there's no cursor concept; we
-    // only act on discrete events like clicks/swipes.
+
+    // ── Intentionally ignored ──────────────────────────────────
+    // mousemove fires too often to inject; Android has no cursor concept anyway.
+    // scroll could become a swipe but desktop sends it without coordinates.
+    // keydown/keyup require focused-node querying — not implemented yet.
     case 'mousemove':
+    case 'scroll':
+    case 'keydown':
+    case 'keyup':
     default:
       return
   }
