@@ -214,7 +214,7 @@ export default function Home() {
               {wsStatus === 'connected' ? 'Online' : wsStatus === 'error' ? 'Offline' : 'Connecting…'}
             </div>
             <a
-              href="https://github.com/jojosindepro89/remotelink/releases/download/v1.0.3-android/RemoteLink.apk"
+              href="https://github.com/jojosindepro89/remotelink/releases/download/v1.0.4-android/RemoteLink.apk"
               className="hidden sm:flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 transition-colors font-semibold"
               title="Download the Android app (APK)"
             >
