@@ -2,7 +2,7 @@
   "expo": {
     "name": "RemoteLink",
     "slug": "remotelink",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -32,7 +32,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#6366f1"
+        "backgroundColor": "#2563eb"
       },
       "package": "com.remotelink.mobile",
       "permissions": [

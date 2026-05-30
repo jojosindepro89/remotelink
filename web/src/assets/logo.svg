@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#60a5fa"/>
+      <stop offset="55%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1d4ed8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect width="1024" height="1024" rx="225" fill="url(#bg)"/>
+
+  <!-- White figure: head + curved body + ball -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Head -->
+    <circle cx="370" cy="295" r="110" fill="#ffffff" stroke="none"/>
+
+    <!-- Body curve — a thick "?" / "R-leg" shape going down and forming
+         a forward-bent torso ending near the ball -->
+    <path
+      d="M 305 460
+         C 245 580 280 720 420 740
+         C 530 754 620 720 656 720"
+      stroke-width="110"/>
+
+    <!-- Small foot/leg curl back -->
+    <path
+      d="M 656 720
+         C 700 720 720 750 696 786"
+      stroke-width="110"/>
+
+    <!-- Ball (offset slightly from the body end) -->
+    <circle cx="720" cy="828" r="62" fill="#ffffff" stroke="none"/>
+  </g>
+</svg>

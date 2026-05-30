@@ -40,9 +40,7 @@ export default function Download() {
   return (
     <div className="min-h-screen bg-mesh flex flex-col">
       <header className="px-6 py-4 flex items-center gap-3 border-b border-white/5">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center">
-          <Monitor size={16} className="text-white" />
-        </div>
+        <img src="/favicon.svg" alt="RemoteLink" className="w-9 h-9 rounded-lg" />
         <span className="font-bold text-lg">RemoteLink</span>
       </header>
 
