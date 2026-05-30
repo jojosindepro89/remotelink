@@ -44,15 +44,22 @@ export default function HomeScreen({ navigation }) {
       const store = useMobileStore.getState()
       socket = io(store.settings.serverUrl, {
         auth: { token: store.token, deviceId: store.deviceId, displayName: `Mobile-${store.deviceId?.slice(-6)}` },
-        transports: ['websocket', 'polling'],   // fall back to polling if WS upgrade fails
+        // Polling-first: socket.io 4 needs polling for the initial handshake,
+        // then upgrades to WebSocket. Mobile networks often block WS-only
+        // connections but always allow HTTPS polling.
+        transports: ['polling', 'websocket'],
+        upgrade: true,
         reconnectionAttempts: 10,
         reconnectionDelay: 2000,
         reconnectionDelayMax: 10000,
-        timeout: 120000,                         // 2 min handshake timeout (Render cold starts)
+        timeout: 120000,
       })
       socket.on('connect', () => setServerStatus('connected'))
       socket.on('disconnect', () => setServerStatus('disconnected'))
-      socket.on('connect_error', () => setServerStatus('error'))
+      socket.on('connect_error', (err) => {
+        console.warn('[Socket] connect_error:', err?.message || err)
+        setServerStatus('error')
+      })
     }
     init()
   }, [])
