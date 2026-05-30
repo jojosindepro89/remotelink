@@ -80,14 +80,21 @@ export default function Download() {
                 Continue in browser (view-only)
               </button>
 
-              <details className="mt-5 text-xs text-slate-500">
-                <summary className="cursor-pointer hover:text-slate-300">After download, how do I install?</summary>
-                <ol className="list-decimal list-inside mt-3 space-y-1.5 leading-relaxed">
-                  <li>Open the downloaded <code className="text-emerald-300">RemoteLink.apk</code> from your notifications or Files app</li>
-                  <li>Android may warn you about "unknown sources" — tap <b>Settings</b> → enable for this once</li>
+              <details className="mt-5 text-xs text-slate-500" open>
+                <summary className="cursor-pointer hover:text-slate-300 font-semibold text-amber-300">⚠️ Heads-up: Google will show "App blocked"</summary>
+                <p className="mt-3 leading-relaxed">
+                  Because RemoteLink isn't on the Play Store, Google Play Protect will warn you when installing. <b>This is expected</b> — here's how to get past it:
+                </p>
+                <ol className="list-decimal list-inside mt-3 space-y-2 leading-relaxed">
+                  <li>Tap <b>"RemoteLink.apk"</b> in your notifications or Downloads</li>
+                  <li>If you see <b>"For your security, your phone isn't allowed to install unknown apps from this source"</b> → tap <b>Settings</b> → toggle <b>Allow from this source</b> ON → back arrow</li>
+                  <li>If you see <b>"App blocked - Play Protect doesn't recognize this app"</b> → tap <b>"More details"</b> (small grey text at the bottom) → <b>"Install anyway"</b></li>
                   <li>Tap <b>Install</b></li>
                   <li>Open RemoteLink and enter the code: <span className="font-mono font-bold text-brand-300">{code || 'ABC123'}</span></li>
                 </ol>
+                <p className="mt-3 text-slate-400 leading-relaxed">
+                  Still blocked? Open <b>Play Store → profile icon → Play Protect → gear icon</b>, then toggle "Scan apps with Play Protect" OFF, install, and toggle back ON.
+                </p>
               </details>
             </div>
           )}
