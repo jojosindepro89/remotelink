@@ -2,7 +2,7 @@
   "expo": {
     "name": "RemoteLink",
     "slug": "remotelink",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -39,6 +39,7 @@
         "RECORD_AUDIO",
         "CAMERA",
         "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PROJECTION",
         "VIBRATE"
       ]
     },
