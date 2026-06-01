@@ -108,7 +108,10 @@ function initSignaling(httpServer) {
         }
 
         const newState = sessionManager.createSession(data.sessionId, {
-          socketId: socket.id, deviceId: socket.deviceId, sessionCode,
+          socketId: socket.id,
+          deviceId: socket.deviceId,
+          sessionCode,
+          passwordHash: data.passwordHash,
         })
 
         socket.join(`session:${data.sessionId}`)
@@ -156,8 +159,13 @@ function initSignaling(httpServer) {
               stunUrls: [process.env.STUN_URL || 'stun:stun.l.google.com:19302'],
             }
           }
-        } else {
-          if (!verifyPin(sessionPassword, dbSession.passwordHash)) return callback?.({ error: 'Incorrect password' })
+        }
+
+        // Verify password in both online and offline cases
+        if (dbSession.passwordHash) {
+          if (!verifyPin(sessionPassword, dbSession.passwordHash)) {
+            return callback?.({ error: 'Incorrect password' })
+          }
         }
 
         const state = sessionManager.addViewer(dbSession.sessionId, {

@@ -70,12 +70,49 @@ export default function Session() {
   useEffect(() => {
     let mounted = true
     let micStream = null
+    let socketInstance = null
+
+    const handleRegisterOrJoin = async () => {
+      if (!mounted || !socketInstance) return
+      if (isHost) {
+        try {
+          await new Promise((res, rej) => {
+            const t = setTimeout(() => rej(new Error('Session register timeout')), 30000)
+            socketInstance.emit('session:create', { sessionId, sessionCode, passwordHash: sessionPassword }, (r) => {
+              clearTimeout(t)
+              r?.error ? rej(new Error(r.error)) : res(r)
+            })
+          })
+          console.log('[Session] Host session registered/reclaimed via WebSocket')
+        } catch (err) {
+          console.error('[Session] Host session registration/reclaim failed:', err)
+          toast.error('Failed to register session: ' + err.message)
+        }
+      } else {
+        try {
+          const joinRes = await new Promise((res, rej) => {
+            const t = setTimeout(() => rej(new Error('Join timeout — host may not have connected yet')), 30000)
+            socketInstance.emit('session:join', { sessionCode, sessionPassword }, (r) => {
+              clearTimeout(t)
+              r?.error ? rej(new Error(r.error)) : res(r)
+            })
+          })
+          hostSocketIdRef.current = joinRes.hostSocketId
+          toast('Waiting for host to share screen…', { icon: '🖥️' })
+        } catch (err) {
+          console.error('[Session] Viewer join failed:', err)
+          toast.error(err.message)
+          setConnectionState('error')
+        }
+      }
+    }
 
     const init = async () => {
       try {
         // Connect socket first
         const socket = connectSignaling()
         socketRef.current = socket
+        socketInstance = socket
 
         if (!socket.connected) {
           await new Promise((res, rej) => {
@@ -181,27 +218,12 @@ export default function Session() {
             // Web host: track mouse over the screen share preview (not useful for viewer)
             // The viewer's control events include pointer position
           }
+        }
 
-        } else {
-          // ── VIEWER FLOW ──────────────────────────────────────
-          // Join the session
-          let joinRes
-          try {
-            joinRes = await new Promise((res, rej) => {
-              const t = setTimeout(() => rej(new Error('Join timeout — host may not have connected yet')), 180000)
-              socket.emit('session:join', { sessionCode, sessionPassword }, (r) => {
-                clearTimeout(t)
-                r?.error ? rej(new Error(r.error)) : res(r)
-              })
-            })
-          } catch (err) {
-            toast.error(err.message)
-            setConnectionState('error')
-            return
-          }
-
-          hostSocketIdRef.current = joinRes.hostSocketId
-          toast('Waiting for host to share screen…', { icon: '🖥️' })
+        // Register/Join initially, and set up connect listener for automatic reconnections
+        socket.on('connect', handleRegisterOrJoin)
+        if (socket.connected) {
+          await handleRegisterOrJoin()
         }
 
         // ── Shared Handlers ──────────────────────────────────
@@ -265,6 +287,7 @@ export default function Session() {
       closePeerConnection()
       const s = getSocket()
       if (s) {
+        s.off('connect', handleRegisterOrJoin)
         s.off('viewer:joined')
         s.off('webrtc:offer')
         s.off('webrtc:answer')

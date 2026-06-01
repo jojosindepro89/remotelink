@@ -20,9 +20,17 @@ class SessionManager {
     // waiting viewer entry would be wiped.
     const existing = this.activeSessions.get(sessionId);
     const viewers = existing?.viewers || new Map();
+
+    let passwordHash = hostInfo.passwordHash || existing?.passwordHash;
+    if (passwordHash && !passwordHash.includes(':')) {
+      const { hashPin } = require('./encryption');
+      passwordHash = hashPin(passwordHash);
+    }
+
     const state = {
       sessionId,
       sessionCode: hostInfo.sessionCode,
+      passwordHash,
       hostSocketId: hostInfo.socketId,
       hostDeviceId: hostInfo.deviceId,
       viewers,
