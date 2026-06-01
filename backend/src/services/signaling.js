@@ -78,8 +78,14 @@ function initSignaling(httpServer) {
       try {
         const { sessionCode } = data
 
-        // First: if this device has a session in grace-period reconnect, restore it
-        const reclaimed = sessionManager.reclaimHostSession(socket.deviceId, socket.id)
+        // First: if this device has a session in grace-period reconnect AND
+        // the requested sessionId/sessionCode matches, restore it. The match
+        // requirement is essential — otherwise clicking "Start Session" a
+        // second time would silently hijack a stale prior session, causing
+        // "Session not found" for viewers using the new code.
+        const reclaimed = sessionManager.reclaimHostSession(
+          socket.deviceId, socket.id, data.sessionId, sessionCode
+        )
         if (reclaimed) {
           socket.join(`session:${reclaimed.sessionId}`)
           socket.sessionId = reclaimed.sessionId

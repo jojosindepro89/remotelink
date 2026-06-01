@@ -126,14 +126,24 @@ class SessionManager {
 
   /**
    * Reclaim a session for a host that has reconnected with a new socket.
-   * Looks up by deviceId — if the host's previous session is in grace
-   * period, swap in the new socket and resume.
+   *
+   * Only reclaims if BOTH the device matches AND the requested
+   * sessionId/sessionCode matches the in-grace session. This prevents the
+   * bug where clicking "Start Session" a second time would hijack the
+   * previous (still-disconnected) session under a NEW code — the new code
+   * would never be findable because the backend would have silently
+   * resumed the old session.
    */
-  reclaimHostSession(deviceId, newSocketId) {
+  reclaimHostSession(deviceId, newSocketId, requestedSessionId, requestedSessionCode) {
     for (const [sessionId, session] of this.activeSessions) {
-      if (session.hostDeviceId === deviceId && session.status === 'host_disconnected') {
+      const deviceMatches = session.hostDeviceId === deviceId;
+      const isInGracePeriod = session.status === 'host_disconnected';
+      const idMatches = requestedSessionId && sessionId === requestedSessionId;
+      const codeMatches = requestedSessionCode
+        && (session.sessionCode || '').toUpperCase() === requestedSessionCode.toUpperCase();
+      if (deviceMatches && isInGracePeriod && (idMatches || codeMatches)) {
         // Remove old socket binding, attach new one
-        this.socketToSession.delete(session.hostSocketId);
+        if (session.hostSocketId) this.socketToSession.delete(session.hostSocketId);
         session.hostSocketId = newSocketId;
         session.status = session.viewers.size > 0 ? 'active' : 'waiting';
         session.hostDisconnectedAt = null;
