@@ -102,7 +102,9 @@ function initSignaling(httpServer) {
 
         if (mongoose.connection.readyState === 1) {
           const existing = await Session.findOne({ sessionCode, status: { $in: ['waiting', 'active'] } })
-          if (existing) return callback?.({ error: 'Session code already in use' })
+          if (existing && existing.sessionId !== data.sessionId) {
+            return callback?.({ error: 'Session code already in use' })
+          }
         }
 
         const newState = sessionManager.createSession(data.sessionId, {
