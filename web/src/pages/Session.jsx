@@ -38,6 +38,8 @@ export default function Session() {
   const hostSocketIdRef  = useRef(null)
   const viewerSocketIdRef = useRef(null)
   const remoteResRef     = useRef({ w: 1920, h: 1080 })  // remote screen resolution
+  const waitingViewersRef = useRef([])
+  const streamReadyRef    = useRef(false)
 
   // State
   const [connectionState, setConnectionState] = useState('connecting')
@@ -176,32 +178,24 @@ export default function Session() {
         })
         pcRef.current = pc
 
-        // ── HOST FLOW ────────────────────────────────────────
-        if (isHost) {
-          // Start screen capture immediately
-          let stream
-          try {
-            stream = await captureScreen({
-              includeAudio: false,
-              onScreenShareStop: () => {
-                if (mounted) {
-                  setIsScreenSharing(false)
-                  toast.error('Screen sharing stopped')
-                }
-              },
-            })
-            addStreamToPeer(stream)
-            setIsScreenSharing(true)
-          } catch (err) {
-            toast.error(err.message)
-            setConnectionState('error')
-            return
-          }
+        // Reset sync refs on mount
+        waitingViewersRef.current = []
+        streamReadyRef.current = false
 
-          // Wait for viewer to join, then create offer
+        // ── HOST FLOW: Set up socket listeners BEFORE registration ──
+        if (isHost) {
           socket.on('viewer:joined', async ({ viewerSocketId: vsId }) => {
             if (!mounted) return
             viewerSocketIdRef.current = vsId
+
+            if (!streamReadyRef.current) {
+              if (!waitingViewersRef.current.includes(vsId)) {
+                waitingViewersRef.current.push(vsId)
+              }
+              console.log('[Session] Viewer joined, waiting for stream to be captured:', vsId)
+              return
+            }
+
             toast('Viewer connected — establishing WebRTC…', { icon: '🔗' })
             try {
               await createOffer(vsId, sessionId)
@@ -209,21 +203,46 @@ export default function Session() {
               toast.error('Failed to create offer: ' + err.message)
             }
           })
-
-          // Broadcast cursor position to viewer every 50ms
-          let cursorInterval = null
-          if (typeof window.__electron !== 'undefined') {
-            // Electron: cursor is tracked by main process
-          } else {
-            // Web host: track mouse over the screen share preview (not useful for viewer)
-            // The viewer's control events include pointer position
-          }
         }
 
-        // Register/Join initially, and set up connect listener for automatic reconnections
+        // Register/Join initially, and set up connect listener for automatic reconnections.
+        // This is executed immediately (doesn't wait for captureScreen user prompt)
+        // to prevent race conditions where viewer tries to join before host chooses a window.
         socket.on('connect', handleRegisterOrJoin)
         if (socket.connected) {
           await handleRegisterOrJoin()
+        }
+
+        // ── HOST FLOW: Start screen capture in background ──
+        if (isHost) {
+          (async () => {
+            try {
+              const stream = await captureScreen({
+                includeAudio: false,
+                onScreenShareStop: () => {
+                  if (mounted) {
+                    setIsScreenSharing(false)
+                    toast.error('Screen sharing stopped')
+                  }
+                },
+              })
+              addStreamToPeer(stream)
+              setIsScreenSharing(true)
+              streamReadyRef.current = true
+
+              // Process any queued viewers who joined while the prompt was open
+              for (const vsId of waitingViewersRef.current) {
+                toast('Viewer connected — establishing WebRTC…', { icon: '🔗' })
+                createOffer(vsId, sessionId).catch((err) => {
+                  toast.error('Failed to create offer: ' + err.message)
+                })
+              }
+              waitingViewersRef.current = []
+            } catch (err) {
+              toast.error(err.message)
+              if (mounted) setConnectionState('error')
+            }
+          })()
         }
 
         // ── Shared Handlers ──────────────────────────────────
