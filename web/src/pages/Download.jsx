@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Download as DownloadIcon, Smartphone, Monitor, ArrowRight, Check, Apple } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-const APK_URL = 'https://github.com/jojosindepro89/remotelink/releases/download/v1.0.6-android/RemoteLink.apk'
+const APK_URL = 'https://github.com/jojosindepro89/remotelink/releases/download/v1.0.7-android/RemoteLink.apk'
 
 function detectPlatform() {
   const ua = navigator.userAgent || ''
