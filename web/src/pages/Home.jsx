@@ -99,14 +99,14 @@ export default function Home() {
             socket = connectSignaling()
             if (!socket.connected) {
               await new Promise((res, rej) => {
-                const t = setTimeout(() => rej(new Error('Signaling connect timeout')), 30000)
+                const t = setTimeout(() => rej(new Error('Signaling connect timeout')), 180000)
                 socket.once('connect', () => { clearTimeout(t); res() })
                 socket.once('connect_error', (e) => { clearTimeout(t); rej(e) })
               })
             }
           }
           await new Promise((res, rej) => {
-            const t = setTimeout(() => rej(new Error('Session register timeout')), 30000)
+            const t = setTimeout(() => rej(new Error('Session register timeout')), 180000)
             socket.emit('session:create', { sessionId, sessionCode, passwordHash: password }, (r) => {
               clearTimeout(t)
               r?.error ? rej(new Error(r.error)) : res(r)

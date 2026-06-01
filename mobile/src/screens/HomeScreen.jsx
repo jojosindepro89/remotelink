@@ -40,7 +40,7 @@ export default function HomeScreen({ navigation }) {
             deviceId: dId,
             platform: Platform.OS,
             deviceName: `${Platform.OS === 'ios' ? 'iPhone' : 'Android'} Device`,
-          }, { timeout: 120000 })
+          }, { timeout: 180000 })
           if (!cancelled) setAuth(res.data.token, res.data.user, dId)
         } catch (err) {
           console.warn('Auth failed:', err.message)
@@ -61,7 +61,7 @@ export default function HomeScreen({ navigation }) {
         reconnectionAttempts: 10,
         reconnectionDelay: 2000,
         reconnectionDelayMax: 10000,
-        timeout: 120000,
+        timeout: 180000,
       })
       socket.on('connect', () => {
         setServerStatus('connected')
@@ -129,7 +129,7 @@ export default function HomeScreen({ navigation }) {
         socket.emit('session:create', { sessionId, sessionCode, passwordHash: password }, (r) => {
           if (r?.error) reject(new Error(r.error)); else resolve(r)
         })
-        setTimeout(() => reject(new Error('Timeout — backend may be cold-starting')), 120000)
+        setTimeout(() => reject(new Error('Timeout — backend may be cold-starting')), 180000)
       })
 
       const session = { sessionId, sessionCode, password, iceConfig, isHost: true }

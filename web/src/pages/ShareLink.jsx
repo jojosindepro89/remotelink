@@ -54,7 +54,7 @@ export default function ShareLink() {
       const socket = getSocket()
       if (socket?.connected) {
         await new Promise((resolve, reject) => {
-          const t = setTimeout(() => reject(new Error('Timed out claiming host role')), 30000)
+          const t = setTimeout(() => reject(new Error('Timed out claiming host role')), 180000)
           socket.emit('session:create', {
             sessionId,
             sessionCode: code,
