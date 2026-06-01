@@ -36,11 +36,16 @@ export function connectSignaling() {
         deviceId,
         displayName: store.user?.displayName || `Web-${deviceId.slice(-6)}`,
       },
-      transports:          ['websocket'],
-      reconnectionAttempts: 5,
+      // Polling-first: socket.io 4 needs polling for the initial handshake,
+      // then upgrades to WebSocket. Many networks (corporate Wi-Fi, ISP
+      // proxies, mobile carriers) block raw WS but allow HTTPS polling.
+      // With ['websocket'] only, every blocked network = silent failure.
+      transports:          ['polling', 'websocket'],
+      upgrade:              true,
+      reconnectionAttempts: 10,
       reconnectionDelay:    2000,
       reconnectionDelayMax: 10000,
-      timeout:              8000,
+      timeout:              180000,
     })
   } catch (err) {
     console.warn('[Signaling] Could not create socket:', err.message)
