@@ -120,7 +120,7 @@ export default function Session() {
           await new Promise((res, rej) => {
             socket.once('connect', res)
             socket.once('connect_error', rej)
-            setTimeout(() => rej(new Error('Socket timeout — backend may be cold-starting')), 180000)
+            setTimeout(() => rej(new Error('Socket timeout — backend may be cold-starting')), 30000)
           })
         }
 

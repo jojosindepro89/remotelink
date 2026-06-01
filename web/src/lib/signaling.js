@@ -45,7 +45,7 @@ export function connectSignaling() {
       reconnectionAttempts: 10,
       reconnectionDelay:    2000,
       reconnectionDelayMax: 10000,
-      timeout:              180000,
+      timeout:              30000,
     })
   } catch (err) {
     console.warn('[Signaling] Could not create socket:', err.message)
