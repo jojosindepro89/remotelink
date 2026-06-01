@@ -13,24 +13,31 @@ class SessionManager {
   }
 
   createSession(sessionId, hostInfo) {
+    // Preserve existing viewers if the session already exists. This supports
+    // the "Request Access" flow: the requester creates the session with
+    // themselves as viewer first; later the recipient calls session:create
+    // to claim the host role. Without preserving viewers, the requester's
+    // waiting viewer entry would be wiped.
+    const existing = this.activeSessions.get(sessionId);
+    const viewers = existing?.viewers || new Map();
     const state = {
       sessionId,
       sessionCode: hostInfo.sessionCode,
       hostSocketId: hostInfo.socketId,
       hostDeviceId: hostInfo.deviceId,
-      viewers: new Map(), // socketId -> viewerInfo
-      status: 'waiting',
-      createdAt: Date.now(),
-      startedAt: null,
-      iceCandidatesQueue: new Map(), // targetSocketId -> candidates[]
+      viewers,
+      status: viewers.size > 0 ? 'active' : 'waiting',
+      createdAt: existing?.createdAt || Date.now(),
+      startedAt: existing?.startedAt || (viewers.size > 0 ? Date.now() : null),
+      iceCandidatesQueue: existing?.iceCandidatesQueue || new Map(),
     };
     this.activeSessions.set(sessionId, state);
-    this.socketToSession.set(hostInfo.socketId, sessionId);
-    this.deviceToSocket.set(hostInfo.deviceId, hostInfo.socketId);
+    if (hostInfo.socketId) this.socketToSession.set(hostInfo.socketId, sessionId);
+    if (hostInfo.deviceId) this.deviceToSocket.set(hostInfo.deviceId, hostInfo.socketId);
 
     // Session timeout: auto-expire after 1hr of waiting
     this._startWaitingTimeout(sessionId);
-    logger.info(`Session created: ${sessionId} by device ${hostInfo.deviceId}`);
+    logger.info(`Session created: ${sessionId} by device ${hostInfo.deviceId} (viewers preserved: ${viewers.size})`);
     return state;
   }
 

@@ -90,17 +90,31 @@ export default function Home() {
           const res = await sessionApi.create({ platform: 'web' })
           ;({ sessionId, sessionCode, password, iceConfig } = res)
 
-          const socket = getSocket()
-          if (socket?.connected) {
-            await new Promise((res, rej) => {
-              const t = setTimeout(() => rej(new Error('timeout')), 120000)
-              socket.emit('session:create', { sessionId, sessionCode, passwordHash: password }, (r) => {
-                clearTimeout(t)
-                r?.error ? rej(new Error(r.error)) : res(r)
+          // Make sure the signaling socket is connected before we announce
+          // the session. If we skip this step the viewer can hit session:join
+          // before the host's WS handler has registered the session, causing
+          // a spurious "Session not found" error.
+          let socket = getSocket()
+          if (!socket || !socket.connected) {
+            socket = connectSignaling()
+            if (!socket.connected) {
+              await new Promise((res, rej) => {
+                const t = setTimeout(() => rej(new Error('Signaling connect timeout')), 30000)
+                socket.once('connect', () => { clearTimeout(t); res() })
+                socket.once('connect_error', (e) => { clearTimeout(t); rej(e) })
               })
-            })
+            }
           }
-        } catch {
+          await new Promise((res, rej) => {
+            const t = setTimeout(() => rej(new Error('Session register timeout')), 30000)
+            socket.emit('session:create', { sessionId, sessionCode, passwordHash: password }, (r) => {
+              clearTimeout(t)
+              r?.error ? rej(new Error(r.error)) : res(r)
+            })
+          })
+        } catch (err) {
+          console.warn('[handleStartSession] Backend session failed:', err?.message)
+          // Fallback to local session for offline P2P
           // Fallback to local session
           ;({ sessionId, sessionCode, password } = makeLocalSession())
           iceConfig = null
@@ -150,6 +164,34 @@ export default function Home() {
       toast.error(err.message || 'Failed to join session')
     } finally {
       setIsJoining(false)
+    }
+  }
+
+  // ── Request Access ────────────────────────────────────────────
+  // I send someone a link. They open it. THEY share their screen.
+  // I become the viewer/controller. Inverse of "Start Session".
+  const [isRequesting, setIsRequesting] = useState(false)
+  const handleRequestAccess = async () => {
+    setIsRequesting(true)
+    try {
+      let sessionId, sessionCode, password, iceConfig
+      if (backendOnline) {
+        const { sessionApi } = await import('../lib/api')
+        const res = await sessionApi.create({ platform: 'web', mode: 'request' })
+        ;({ sessionId, sessionCode, password, iceConfig } = res)
+      } else {
+        ;({ sessionId, sessionCode, password } = makeLocalSession())
+      }
+      const session = { sessionId, sessionCode, password, iceConfig, isHost: false, awaitHost: true }
+      setActiveSession(session)
+      setIsHost(false)
+      addToHistory({ sessionId, sessionCode, startedAt: new Date().toISOString(), role: 'requester' })
+      // Navigate as viewer-awaiting-host. The link we share is /share/CODE/PASS.
+      navigate(`/session/${sessionId}?host=false&code=${sessionCode}&pass=${password}&awaitHost=1`)
+    } catch (err) {
+      toast.error(err.message || 'Failed to create access request')
+    } finally {
+      setIsRequesting(false)
     }
   }
 
@@ -253,7 +295,34 @@ export default function Home() {
           </div>
 
           {/* ── Main Cards ── */}
-          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-16 animate-slide-up">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto mb-16 animate-slide-up">
+
+            {/* Request Access — invite someone, THEY share their screen with ME */}
+            <div className="glass rounded-2xl p-8 relative overflow-hidden group hover:border-amber-500/30 transition-all duration-300">
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              <div className="relative">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center mb-5">
+                  <ArrowRight size={22} className="text-amber-400" />
+                </div>
+                <h2 className="text-xl font-bold mb-2">Request Access</h2>
+                <p className="text-slate-400 text-sm mb-6 leading-relaxed">
+                  Send someone a link. When they open it, <b className="text-amber-300">they share their screen</b> and you control them. Use this to help someone else.
+                </p>
+                <button
+                  id="btn-request-access"
+                  onClick={handleRequestAccess}
+                  disabled={isRequesting}
+                  className="w-full py-3 text-sm rounded-xl bg-amber-500/15 border border-amber-500/35 text-amber-300 hover:bg-amber-500/25 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {isRequesting ? (
+                    <><span className="spinner" style={{ width: 16, height: 16 }} /> Creating…</>
+                  ) : (
+                    <span className="inline-flex items-center gap-2">📥 Request Access</span>
+                  )}
+                </button>
+                <p className="text-xs text-slate-500 mt-3 text-center">You'll see and control their screen</p>
+              </div>
+            </div>
 
             {/* Start Session */}
             <div className="glass rounded-2xl p-8 relative overflow-hidden group hover:border-brand-500/30 transition-all duration-300">

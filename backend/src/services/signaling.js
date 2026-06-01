@@ -99,7 +99,7 @@ function initSignaling(httpServer) {
           if (existing) return callback?.({ error: 'Session code already in use' })
         }
 
-        sessionManager.createSession(data.sessionId, {
+        const newState = sessionManager.createSession(data.sessionId, {
           socketId: socket.id, deviceId: socket.deviceId, sessionCode,
         })
 
@@ -107,8 +107,19 @@ function initSignaling(httpServer) {
         socket.sessionId = data.sessionId
         socket.role      = 'host'
 
+        // If pre-existing viewers were waiting (Request-Access flow), tell
+        // the new host about each one so the WebRTC handshake can begin.
+        if (newState.viewers.size > 0) {
+          for (const [viewerSocketId, viewer] of newState.viewers) {
+            io.to(socket.id).emit('viewer:joined', {
+              viewerSocketId, deviceId: viewer.deviceId, displayName: viewer.displayName,
+            })
+          }
+          logger.info(`Host claimed session ${data.sessionId} with ${newState.viewers.size} waiting viewer(s)`)
+        }
+
         logger.info(`Host created session ${data.sessionId} (${sessionCode})`)
-        callback?.({ success: true, sessionId: data.sessionId })
+        callback?.({ success: true, sessionId: data.sessionId, viewerCount: newState.viewers.size })
       } catch (err) {
         logger.error('session:create error', err)
         callback?.({ error: err.message })

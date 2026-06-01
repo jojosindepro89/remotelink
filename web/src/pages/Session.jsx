@@ -25,6 +25,7 @@ export default function Session() {
   const [searchParams]   = useSearchParams()
   const navigate         = useNavigate()
   const isHost           = searchParams.get('host') === 'true'
+  const awaitHost        = searchParams.get('awaitHost') === '1'
   const sessionCode      = searchParams.get('code')
   const sessionPassword  = searchParams.get('pass')
   const { activeSession } = useSessionStore()
@@ -440,11 +441,14 @@ export default function Session() {
     const code = activeSession?.sessionCode || sessionCode || ''
     const pass = activeSession?.password || sessionPassword || ''
     if (!code) return
-    const link = `${window.location.origin}/j/${code}${pass ? `/${encodeURIComponent(pass)}` : ''}`
+    // In await-host mode the recipient should become the screen-sharer, so
+    // they need a /share/ link; otherwise the regular /j/ join link.
+    const prefix = awaitHost ? '/share' : '/j'
+    const link = `${window.location.origin}${prefix}/${code}${pass ? `/${encodeURIComponent(pass)}` : ''}`
     try {
       await navigator.clipboard.writeText(link)
       setLinkCopied(true)
-      toast.success('Invite link copied!', { icon: '🔗' })
+      toast.success(awaitHost ? 'Access-request link copied!' : 'Invite link copied!', { icon: '🔗' })
       setTimeout(() => setLinkCopied(false), 2000)
     } catch {
       toast.error('Could not copy link')
@@ -512,7 +516,7 @@ export default function Session() {
           </div>
 
           {/* Session code */}
-          {isHost && activeSession?.sessionCode && (
+          {(isHost || awaitHost) && activeSession?.sessionCode && (
             <div style={{ display:'flex', alignItems:'center', gap:8, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:10, padding:'5px 12px' }}>
               <span style={{ fontSize:11, color:'#94a3b8' }}>Code</span>
               <span style={{ fontFamily:'monospace', fontSize:14, fontWeight:800, color:'#a5b4fc', letterSpacing:2 }}>{activeSession.sessionCode}</span>
@@ -521,20 +525,20 @@ export default function Session() {
               </button>
             </div>
           )}
-          {isHost && activeSession?.password && (
+          {(isHost || awaitHost) && activeSession?.password && (
             <div style={{ display:'flex', alignItems:'center', gap:8, background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:10, padding:'5px 12px' }}>
               <span style={{ fontSize:11, color:'#94a3b8' }}>Pass</span>
               <span style={{ fontFamily:'monospace', fontSize:14, fontWeight:800, color:'#6ee7b7' }}>{activeSession.password}</span>
             </div>
           )}
-          {isHost && (activeSession?.sessionCode || sessionCode) && (
+          {(isHost || awaitHost) && (activeSession?.sessionCode || sessionCode) && (
             <button
               onClick={handleCopyInviteLink}
               style={{ display:'flex', alignItems:'center', gap:6, background: linkCopied ? 'rgba(16,185,129,0.15)' : 'rgba(99,102,241,0.15)', border:`1px solid ${linkCopied ? 'rgba(16,185,129,0.35)' : 'rgba(99,102,241,0.35)'}`, borderRadius:10, padding:'5px 12px', color: linkCopied ? '#6ee7b7' : '#a5b4fc', fontSize:12, fontWeight:600, cursor:'pointer' }}
-              title="Copy invite link — anyone with this link joins automatically"
+              title={awaitHost ? "Send this link to the person whose screen you want to view" : "Copy invite link — anyone with this link joins automatically"}
             >
               {linkCopied ? <Check size={12} /> : <Link2 size={12} />}
-              {linkCopied ? 'Copied!' : 'Invite link'}
+              {linkCopied ? 'Copied!' : awaitHost ? 'Access-request link' : 'Invite link'}
             </button>
           )}
 
