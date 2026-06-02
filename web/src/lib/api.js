@@ -5,9 +5,6 @@ const PROD_API = 'https://remotelink-backend.onrender.com/api'
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || PROD_API,
   timeout: 15000,
-  headers: {
-    'Bypass-Tunnel-Reminder': 'true'
-  }
 })
 
 api.interceptors.request.use((config) => {
