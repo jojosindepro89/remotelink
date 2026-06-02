@@ -79,7 +79,7 @@ export default function Session() {
       if (isHost) {
         try {
           await new Promise((res, rej) => {
-            const t = setTimeout(() => rej(new Error('Session register timeout')), 30000)
+            const t = setTimeout(() => rej(new Error('Session register timeout')), 120000)
             socketInstance.emit('session:create', { sessionId, sessionCode, passwordHash: sessionPassword }, (r) => {
               clearTimeout(t)
               r?.error ? rej(new Error(r.error)) : res(r)
@@ -93,7 +93,7 @@ export default function Session() {
       } else {
         try {
           const joinRes = await new Promise((res, rej) => {
-            const t = setTimeout(() => rej(new Error('Join timeout — host may not have connected yet')), 30000)
+            const t = setTimeout(() => rej(new Error('Join timeout — host may not have connected yet')), 120000)
             socketInstance.emit('session:join', { sessionCode, sessionPassword }, (r) => {
               clearTimeout(t)
               r?.error ? rej(new Error(r.error)) : res(r)
@@ -120,7 +120,7 @@ export default function Session() {
           await new Promise((res, rej) => {
             socket.once('connect', res)
             socket.once('connect_error', rej)
-            setTimeout(() => rej(new Error('Socket timeout — backend may be cold-starting')), 30000)
+            setTimeout(() => rej(new Error('Socket timeout — backend may be cold-starting')), 120000)
           })
         }
 

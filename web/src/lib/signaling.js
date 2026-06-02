@@ -80,7 +80,7 @@ export function disconnectSignaling() {
   }
 }
 
-export function emitWithAck(event, data, timeout = 8000) {
+export function emitWithAck(event, data, timeout = 30000) {
   return new Promise((resolve, reject) => {
     if (!socket?.connected) {
       return reject(new Error('Not connected to signaling server'))
