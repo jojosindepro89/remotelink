@@ -45,7 +45,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-ID'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Device-ID', 'Bypass-Tunnel-Reminder'],
 }));
 
 
