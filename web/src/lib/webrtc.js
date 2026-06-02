@@ -8,20 +8,19 @@ let dataChannel     = null
 let pendingCandidates = []
 let controlHandlers = {}
 
+// Fallback used only if /api/ice-config fails. Mirror the backend's clean
+// STUN-only list — DO NOT add openrelay.metered.ca (their public free TURN
+// shut down in late 2024 and the credentials are dead; including them
+// makes ICE gathering waste seconds on unreachable servers before timing
+// out). For TURN, configure TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN on the
+// backend and the real ICE servers come from /api/ice-config.
 const ICE_SERVERS_DEFAULT = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
-  // Free public TURN — relays when STUN can't punch through NAT
-  {
-    urls: [
-      'turn:openrelay.metered.ca:80',
-      'turn:openrelay.metered.ca:443',
-      'turn:openrelay.metered.ca:443?transport=tcp',
-    ],
-    username: 'openrelayproject',
-    credential: 'openrelayproject',
-  },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
 ]
 
 export function getPeerConnection()  { return peerConnection }

@@ -32,9 +32,17 @@ function initSignaling(httpServer) {
       methods: ['GET', 'POST'],
       credentials: true,
     },
-    transports: ['websocket', 'polling'],
-    pingInterval: 10000,
-    pingTimeout: 5000,
+    transports: ['polling', 'websocket'],
+    // pingInterval + pingTimeout govern how long socket.io tolerates an
+    // unresponsive peer before declaring it disconnected. 15s total was
+    // too aggressive — transient cellular / Wi-Fi handoffs or background
+    // tab throttling regularly exceed it and dropped sessions for users
+    // who never actually disconnected. ~45s window is the standard
+    // production setting and matches most reverse-proxy idle timeouts.
+    pingInterval: 25000,
+    pingTimeout: 20000,
+    // Allow larger payloads (control event bursts during fast typing)
+    maxHttpBufferSize: 2_000_000,
   })
 
   // ── Auth middleware ────────────────────────────────────
@@ -139,7 +147,12 @@ function initSignaling(httpServer) {
 
     socket.on('session:join', async (data, callback) => {
       try {
-        const { sessionCode, sessionPassword } = data
+        const { sessionCode: rawCode, sessionPassword } = data || {}
+        if (typeof rawCode !== 'string' || rawCode.trim().length === 0) {
+          return callback?.({ error: 'Invalid session code' })
+        }
+        const sessionCode = rawCode.trim().toUpperCase()
+        logger.info(`[join] sock=${socket.id} dev=${socket.deviceId} code=${sessionCode}`)
 
         let dbSession = null
         if (mongoose.connection.readyState === 1) {
@@ -148,8 +161,11 @@ function initSignaling(httpServer) {
 
         if (!dbSession) {
           // If offline: fallback to finding the session in memory inside sessionManager
-          const memorySession = sessionManager.getSessionByCode(sessionCode.toUpperCase())
-          if (!memorySession) return callback?.({ error: 'Session not found or expired' })
+          const memorySession = sessionManager.getSessionByCode(sessionCode)
+          if (!memorySession) {
+            logger.warn(`[join] code=${sessionCode} not found in DB or memory`)
+            return callback?.({ error: 'Session not found or expired' })
+          }
           
           dbSession = {
             sessionId: memorySession.sessionId,
@@ -198,10 +214,23 @@ function initSignaling(httpServer) {
       }
     })
 
-    // WebRTC relay for sessions
-    socket.on('webrtc:offer',  ({ targetSocketId, offer,      sessionId }) => { io.to(targetSocketId).emit('webrtc:offer',  { fromSocketId: socket.id, offer,      sessionId }) })
-    socket.on('webrtc:answer', ({ targetSocketId, answer,     sessionId }) => { io.to(targetSocketId).emit('webrtc:answer', { fromSocketId: socket.id, answer,     sessionId }) })
-    socket.on('webrtc:ice',    ({ targetSocketId, candidate,  sessionId }) => { io.to(targetSocketId).emit('webrtc:ice',    { fromSocketId: socket.id, candidate,  sessionId }) })
+    // WebRTC relay for sessions. Validate the relay target so a misbehaving
+    // client can't send signalling to arbitrary sockets, and log each step
+    // with the sessionId so the offer/answer/ICE round trip is traceable.
+    socket.on('webrtc:offer', ({ targetSocketId, offer, sessionId }) => {
+      if (!targetSocketId || !sessionId) return
+      logger.info(`[rtc:offer] session=${sessionId} ${socket.id}→${targetSocketId}`)
+      io.to(targetSocketId).emit('webrtc:offer', { fromSocketId: socket.id, offer, sessionId })
+    })
+    socket.on('webrtc:answer', ({ targetSocketId, answer, sessionId }) => {
+      if (!targetSocketId || !sessionId) return
+      logger.info(`[rtc:answer] session=${sessionId} ${socket.id}→${targetSocketId}`)
+      io.to(targetSocketId).emit('webrtc:answer', { fromSocketId: socket.id, answer, sessionId })
+    })
+    socket.on('webrtc:ice', ({ targetSocketId, candidate, sessionId }) => {
+      if (!targetSocketId) return
+      io.to(targetSocketId).emit('webrtc:ice', { fromSocketId: socket.id, candidate, sessionId })
+    })
 
     socket.on('control:event', (data) => {
       const session = sessionManager.getSessionBySocket(socket.id)
@@ -384,11 +413,19 @@ function initSignaling(httpServer) {
 
       const { session, role } = result
       if (role === 'host') {
-        io.to(`session:${session.sessionId}`).emit('session:host_disconnected', { reason, reconnectWindow: 30000 })
-        await Session.findOneAndUpdate({ sessionId: session.sessionId }, { status: 'ended', endedAt: new Date() })
-          .catch(err => logger.error('Session end DB error', err))
+        // Tell viewers the host left BUT let the in-memory grace period in
+        // sessionManager handle the actual ending. Previously we flipped
+        // the DB row to 'ended' immediately, contradicting the 60s grace
+        // period and making the session unreachable via REST even when
+        // the host was about to reconnect. The DB row only flips when the
+        // grace period genuinely expires OR session:end is fired.
+        io.to(`session:${session.sessionId}`).emit('session:host_disconnected', { reason, reconnectWindow: 60000 })
+        logger.info(`[session:${session.sessionId}] host disconnected (${reason}) — 60s grace period started`)
       } else if (role === 'viewer') {
-        io.to(session.hostSocketId).emit('viewer:left', { viewerSocketId: socket.id, reason })
+        if (session.hostSocketId) {
+          io.to(session.hostSocketId).emit('viewer:left', { viewerSocketId: socket.id, reason })
+        }
+        logger.info(`[session:${session.sessionId}] viewer ${socket.id} left (${reason})`)
       }
     })
   })
