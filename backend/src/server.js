@@ -8,8 +8,11 @@ const cookieParser = require('cookie-parser');
 const morgan = require('morgan');
 const path = require('path');
 
+const mongoose = require('mongoose');
 const { connectDB } = require('./config/db');
 const initSignaling = require('./services/signaling');
+const { getConnectionLog } = require('./services/signaling');
+const sessionManager = require('./services/sessionManager');
 const logger = require('./utils/logger');
 const { generalLimiter } = require('./middleware/rateLimit');
 
@@ -70,6 +73,60 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     version: process.env.npm_package_version || '1.0.0',
     environment: process.env.NODE_ENV,
+    uptime: Math.round(process.uptime()),
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+  });
+});
+
+// ── Full Diagnostic Endpoint ──────────────────────────────────
+app.get('/diagnostic', async (req, res) => {
+  const stats = sessionManager.getActiveSessionsStats();
+  const io = httpServer.__io;
+  const socketCount = io ? io.engine?.clientsCount || 0 : 0;
+
+  const hasTwilio = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+  const hasTurn = !!(process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL);
+  let turnStatus = 'none';
+  if (hasTwilio) {
+    try {
+      const sid = process.env.TWILIO_ACCOUNT_SID;
+      const token = process.env.TWILIO_AUTH_TOKEN;
+      const auth = Buffer.from(`${sid}:${token}`).toString('base64');
+      const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Tokens.json`, {
+        method: 'POST', headers: { Authorization: `Basic ${auth}` },
+      });
+      turnStatus = r.ok ? 'twilio-ok' : `twilio-error-${r.status}`;
+    } catch (e) { turnStatus = `twilio-fail: ${e.message}`; }
+  } else if (hasTurn) {
+    turnStatus = 'custom-configured';
+  }
+
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: Math.round(process.uptime()),
+    memory: {
+      rss: Math.round(process.memoryUsage().rss / 1024 / 1024) + 'MB',
+      heap: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+    },
+    mongodb: {
+      state: ['disconnected', 'connected', 'connecting', 'disconnecting'][mongoose.connection.readyState] || 'unknown',
+      readyState: mongoose.connection.readyState,
+    },
+    signaling: {
+      websocketConnections: socketCount,
+    },
+    sessions: stats,
+    turn: {
+      provider: hasTwilio ? 'twilio' : hasTurn ? 'custom' : 'none',
+      status: turnStatus,
+    },
+    config: {
+      sessionTimeoutMs: parseInt(process.env.SESSION_TIMEOUT_MS) || 3600000,
+      sessionMaxDurationMs: parseInt(process.env.SESSION_MAX_DURATION_MS) || 28800000,
+      allowedOrigins: (process.env.ALLOWED_ORIGINS || '*').split(',').map(s => s.trim()),
+    },
+    recentEvents: getConnectionLog().slice(-50),
   });
 });
 
@@ -181,8 +238,8 @@ async function start() {
   // Connect to DB — non-blocking so server starts even if MongoDB is slow
   connectDB().catch(err => logger.warn(`DB not connected at startup: ${err.message}`));
 
-  // Initialize WebSocket signaling
-  initSignaling(httpServer);
+  // Initialize WebSocket signaling and store ref for diagnostics
+  httpServer.__io = initSignaling(httpServer);
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     logger.info(`🚀 RemoteLink server running on port ${PORT}`);

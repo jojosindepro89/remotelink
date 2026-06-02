@@ -11,6 +11,16 @@ function getCallRooms() {
   try { return require('../routes/calls').callRooms } catch { return new Map() }
 }
 
+// Ring buffer for connection event logs (accessible via /diagnostic)
+const CONNECTION_LOG_MAX = 200
+const connectionLog = []
+function logEvent(type, detail) {
+  connectionLog.push({ ts: new Date().toISOString(), type, ...detail })
+  if (connectionLog.length > CONNECTION_LOG_MAX) connectionLog.shift()
+}
+
+function getConnectionLog() { return connectionLog }
+
 /**
  * WebSocket Signaling Server
  * Handles WebRTC offer/answer/ICE relay for both screen-sharing sessions
@@ -77,6 +87,7 @@ function initSignaling(httpServer) {
   // ── Connection ─────────────────────────────────────────
   io.on('connection', (socket) => {
     logger.info(`Socket connected: ${socket.id} (device: ${socket.deviceId})`)
+    logEvent('ws:connect', { socketId: socket.id, deviceId: socket.deviceId, displayName: socket.displayName })
 
     // ─────────────────────────────────────────────────────
     // SCREEN SHARING SESSION SIGNALING
@@ -138,6 +149,7 @@ function initSignaling(httpServer) {
         }
 
         logger.info(`Host created session ${data.sessionId} (${sessionCode})`)
+        logEvent('session:created', { sessionId: data.sessionId, sessionCode, deviceId: socket.deviceId })
         callback?.({ success: true, sessionId: data.sessionId, viewerCount: newState.viewers.size })
       } catch (err) {
         logger.error('session:create error', err)
@@ -201,6 +213,7 @@ function initSignaling(httpServer) {
         }
 
         logger.info(`Viewer joined session ${dbSession.sessionId}`)
+        logEvent('session:joined', { sessionId: dbSession.sessionId, sessionCode, deviceId: socket.deviceId, viewerSocketId: socket.id })
         callback?.({
           success: true,
           sessionId: dbSession.sessionId,
@@ -395,6 +408,7 @@ function initSignaling(httpServer) {
     // ─────────────────────────────────────────────────────
     socket.on('disconnect', async (reason) => {
       logger.info(`Socket disconnected: ${socket.id} (${reason})`)
+      logEvent('ws:disconnect', { socketId: socket.id, deviceId: socket.deviceId, reason })
 
       // Call room cleanup
       if (socket.callRoom) {
@@ -435,3 +449,4 @@ function initSignaling(httpServer) {
 }
 
 module.exports = initSignaling
+module.exports.getConnectionLog = getConnectionLog
