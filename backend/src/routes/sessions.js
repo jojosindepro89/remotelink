@@ -107,10 +107,9 @@ router.post('/join', optionalAuth, sessionLimiter, async (req, res) => {
   try {
     const { sessionCode } = req.body;
 
-    // Fallback if MongoDB is not connected
+    // Fallback if MongoDB is not connected — use in-memory session manager
     if (mongoose.connection.readyState !== 1) {
       const code = sessionCode.toUpperCase();
-      // Try to find the session in sessionManager
       const foundSession = sessionManager.getSessionByCode(code);
       if (foundSession) {
         return res.json({
@@ -124,20 +123,8 @@ router.post('/join', optionalAuth, sessionLimiter, async (req, res) => {
             turnCredential: process.env.TURN_CREDENTIAL || null,
           }
         });
-      } else {
-        // Mock fallback to allow guest direct testing even if not in memory
-        return res.json({
-          sessionId: `mock-session-${code}`,
-          sessionCode: code,
-          status: 'waiting',
-          iceConfig: {
-            stunUrls: [process.env.STUN_URL || 'stun:stun.l.google.com:19302'],
-            turnUrl: process.env.TURN_URL || null,
-            turnUsername: process.env.TURN_USERNAME || null,
-            turnCredential: process.env.TURN_CREDENTIAL || null,
-          }
-        });
       }
+      return res.status(404).json({ error: 'Session not found or expired' });
     }
 
     const session = await Session.findOne({

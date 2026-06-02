@@ -204,13 +204,15 @@ class SessionManager {
   }
 
   _startWaitingTimeout(sessionId) {
+    const waitTimeout = parseInt(process.env.SESSION_TIMEOUT_MS) || 3600000;
     const handle = setTimeout(() => {
       const session = this.activeSessions.get(sessionId);
       if (session && session.status === 'waiting') {
         session.status = 'timeout';
-        logger.info(`Session ${sessionId} timed out waiting for viewer`);
+        logger.info(`Session ${sessionId} timed out waiting for viewer after ${waitTimeout / 1000}s`);
+        setTimeout(() => this.activeSessions.delete(sessionId), 30000);
       }
-    }, 10 * 60 * 1000); // 10 min wait timeout
+    }, waitTimeout);
     this.timeouts.set(sessionId, handle);
   }
 

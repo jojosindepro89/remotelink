@@ -10,10 +10,13 @@ let peerConnection = null
 let localStream = null
 let dataChannel = null
 let controlHandlers = {}
+let pendingCandidates = []
 
 const ICE_DEFAULTS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
 ]
 
 export function getPeerConnection() { return peerConnection }
@@ -33,7 +36,10 @@ export function createPeerConnection(iceConfig, handlers = {}) {
   peerConnection.addEventListener('iceconnectionstatechange', () => {
     const state = peerConnection.iceConnectionState
     handlers.onStateChange?.(state)
-    if (state === 'failed') peerConnection.restartIce()
+    if (state === 'failed') {
+      peerConnection.restartIce()
+      handlers.onIceRestart?.()
+    }
   })
 
   peerConnection.addEventListener('track', (event) => {
@@ -83,34 +89,62 @@ export async function getMobileScreenStream() {
   }
 }
 
-export async function createOffer(targetSocketId, sessionId, socket) {
-  dataChannel = peerConnection.createDataChannel('control', { ordered: true })
-  setupDataChannel(dataChannel, controlHandlers)
+export async function createOffer(targetSocketId, sessionId, socket, { iceRestart = false } = {}) {
+  if (!peerConnection) throw new Error('No peer connection')
 
-  const offer = await peerConnection.createOffer({ offerToReceiveVideo: false, offerToReceiveAudio: false })
+  if (!dataChannel || dataChannel.readyState === 'closed') {
+    dataChannel = peerConnection.createDataChannel('control', { ordered: true })
+    setupDataChannel(dataChannel, controlHandlers)
+  }
+
+  const offer = await peerConnection.createOffer({
+    offerToReceiveVideo: true,
+    offerToReceiveAudio: true,
+    iceRestart,
+  })
   await peerConnection.setLocalDescription(offer)
   socket.emit('webrtc:offer', { targetSocketId, offer, sessionId })
 }
 
 export async function handleOffer(offer, fromSocketId, sessionId, socket) {
+  if (!peerConnection) throw new Error('No peer connection')
+
+  if (peerConnection.signalingState === 'have-local-offer') {
+    await peerConnection.setLocalDescription({ type: 'rollback' })
+  }
+
   await peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
+
+  for (const c of pendingCandidates) {
+    await peerConnection.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
+  }
+  pendingCandidates = []
+
   const answer = await peerConnection.createAnswer()
   await peerConnection.setLocalDescription(answer)
   socket.emit('webrtc:answer', { targetSocketId: fromSocketId, answer, sessionId })
 }
 
 export async function handleAnswer(answer) {
+  if (!peerConnection) return
   if (peerConnection.signalingState !== 'have-local-offer') return
   await peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
+
+  for (const c of pendingCandidates) {
+    await peerConnection.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
+  }
+  pendingCandidates = []
 }
 
 export async function addIceCandidate(candidate) {
   try {
     if (peerConnection?.remoteDescription) {
       await peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
+    } else {
+      pendingCandidates.push(candidate)
     }
   } catch (err) {
-    console.warn('[WebRTC] ICE error:', err.message)
+    console.warn('[WebRTC] ICE error (ignored):', err.message)
   }
 }
 
@@ -138,4 +172,6 @@ export function closePeerConnection() {
   dataChannel = null
   peerConnection?.close()
   peerConnection = null
+  pendingCandidates = []
+  controlHandlers = {}
 }

@@ -164,9 +164,7 @@ export default function Session() {
             if (state === 'disconnected') toast.error('Connection lost')
           },
           onControlEvent: (event) => {
-            // HOST receives control events from viewer and executes them
             if (isHost) executor.current.execute(event, getVideoRect())
-            // Show remote pointer on viewer side if host broadcasts cursor
             if (!isHost && event.type === 'cursor') {
               setRemotePointer({ x: event.x, y: event.y })
             }
@@ -174,6 +172,16 @@ export default function Session() {
           onDataChannelOpen: () => {
             if (!mounted) return
             toast.success('Remote control channel ready', { icon: '🎮' })
+          },
+          onIceRestart: () => {
+            if (!mounted) return
+            const target = isHost ? viewerSocketIdRef.current : hostSocketIdRef.current
+            if (target) {
+              console.log('[Session] ICE restart — sending new offer')
+              createOffer(target, sessionId, { iceRestart: true }).catch(err => {
+                console.error('[Session] ICE restart offer failed:', err)
+              })
+            }
           },
         })
         pcRef.current = pc
@@ -250,7 +258,10 @@ export default function Session() {
         socket.on('webrtc:offer', async ({ fromSocketId, offer }) => {
           if (!mounted) return
           if (isHost) viewerSocketIdRef.current = fromSocketId
-          else hostSocketIdRef.current = fromSocketId
+          else {
+            hostSocketIdRef.current = fromSocketId
+            setConnectionState(prev => prev === 'reconnecting' ? 'connecting' : prev)
+          }
           try {
             await handleOffer(offer, fromSocketId, sessionId)
           } catch (err) { console.error('handleOffer error:', err) }
@@ -270,9 +281,11 @@ export default function Session() {
           setTimeout(() => navigate('/'), 2000)
         })
 
-        socket.on('session:host_disconnected', () => {
-          if (mounted) setConnectionState('disconnected')
-          toast.error('Host disconnected — waiting to reconnect…')
+        socket.on('session:host_disconnected', ({ reconnectWindow }) => {
+          if (!mounted) return
+          setConnectionState('reconnecting')
+          const secs = Math.round((reconnectWindow || 60000) / 1000)
+          toast(`Host disconnected — waiting up to ${secs}s for reconnect…`, { icon: '⏳', duration: 6000 })
         })
 
         socket.on('chat:message', (msg) => {
@@ -526,7 +539,7 @@ export default function Session() {
   }
 
   const stateColor = {
-    connecting: '#fbbf24', connected: '#10b981',
+    connecting: '#fbbf24', connected: '#10b981', reconnecting: '#f59e0b',
     disconnected: '#ef4444', failed: '#ef4444', error: '#ef4444',
   }
 
@@ -670,13 +683,21 @@ export default function Session() {
           {/* Connection overlay */}
           {connectionState !== 'connected' && (
             <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:'rgba(0,0,0,0.85)' }}>
-              {connectionState === 'error' ? (
+              {connectionState === 'error' || connectionState === 'failed' ? (
                 <>
-                  <p style={{ fontSize:40, marginBottom:12 }}>⚠️</p>
+                  <p style={{ fontSize:40, marginBottom:12 }}>&#x26A0;&#xFE0F;</p>
                   <p style={{ color:'#f87171', fontSize:14, fontWeight:600, marginBottom:8 }}>Connection failed</p>
                   <button onClick={() => window.location.reload()} style={{ background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:10, padding:'8px 20px', color:'white', fontSize:12, cursor:'pointer', marginTop:12 }}>
                     <RefreshCw size={13} style={{ display:'inline', marginRight:6 }} />Retry
                   </button>
+                </>
+              ) : connectionState === 'reconnecting' ? (
+                <>
+                  <div className="spinner" style={{ width:40, height:40, borderWidth:3, marginBottom:16 }} />
+                  <p style={{ color:'#f59e0b', fontSize:14, fontWeight:600 }}>Reconnecting…</p>
+                  <p style={{ color:'#475569', fontSize:12, marginTop:6 }}>
+                    Host disconnected temporarily — waiting for reconnection
+                  </p>
                 </>
               ) : (
                 <>

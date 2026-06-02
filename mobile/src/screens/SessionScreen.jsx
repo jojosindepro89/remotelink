@@ -23,6 +23,8 @@ export default function SessionScreen({ navigation, route }) {
   const { settings } = useMobileStore()
 
   const videoRef = useRef(null)
+  const hostSocketIdRef = useRef(null)
+  const viewerSocketIdRef = useRef(null)
   const [remoteStream, setRemoteStream] = useState(null)
   const [connectionState, setConnectionState] = useState('connecting')
   const [controlEnabled, setControlEnabled] = useState(false)
@@ -30,8 +32,6 @@ export default function SessionScreen({ navigation, route }) {
   const [chatVisible, setChatVisible] = useState(false)
   const [chatMessages, setChatMessages] = useState([])
   const [chatInput, setChatInput] = useState('')
-  const [hostSocketId, setHostSocketId] = useState(null)
-  const [viewerSocketId, setViewerSocketId] = useState(null)
   const [scale, setScale] = useState(1)
 
   // Pinch to zoom
@@ -68,7 +68,7 @@ export default function SessionScreen({ navigation, route }) {
           ...(iceConfig?.turnUrl ? [{ urls: iceConfig.turnUrl, username: iceConfig.turnUsername, credential: iceConfig.turnCredential }] : [])
         ]}, {
           onIceCandidate: (candidate) => {
-            const target = isHost ? viewerSocketId : hostSocketId
+            const target = isHost ? viewerSocketIdRef.current : hostSocketIdRef.current
             if (target) socket.emit('webrtc:ice', { targetSocketId: target, candidate, sessionId })
           },
           onRemoteStream: (stream) => {
@@ -108,7 +108,7 @@ export default function SessionScreen({ navigation, route }) {
           }
 
           socket.on('viewer:joined', async ({ viewerSocketId: vsId }) => {
-            setViewerSocketId(vsId)
+            viewerSocketIdRef.current = vsId
             await createOffer(vsId, sessionId, socket)
           })
           socket.on('webrtc:answer', async ({ answer }) => await handleAnswer(answer))
@@ -118,13 +118,13 @@ export default function SessionScreen({ navigation, route }) {
               sessionCode: session.sessionCode,
               sessionPassword: session.password,
             }, (res) => {
-              if (res?.error) reject(new Error(res.error)); else { setHostSocketId(res.hostSocketId); resolve(res) }
+              if (res?.error) reject(new Error(res.error)); else { hostSocketIdRef.current = res.hostSocketId; resolve(res) }
             })
             setTimeout(() => reject(new Error('Timeout — backend may be cold-starting')), 180000)
           })
 
           socket.on('webrtc:offer', async ({ fromSocketId, offer }) => {
-            setHostSocketId(fromSocketId)
+            hostSocketIdRef.current = fromSocketId
             await handleOffer(offer, fromSocketId, sessionId, socket)
           })
         }
@@ -157,11 +157,22 @@ export default function SessionScreen({ navigation, route }) {
   }, [sessionId, isHost])
 
   // Touch → mouse control mapping
+  // Sends mousedown/mousemove/mouseup so the host can distinguish
+  // taps, long presses, and swipes via the executeIncomingEvent logic.
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => controlEnabled && !isHost,
     onMoveShouldSetPanResponder: () => controlEnabled && !isHost,
-    onPanResponderMove: (evt, gs) => {
-      const { locationX, locationY, target } = evt.nativeEvent
+    onPanResponderGrant: (evt) => {
+      const { locationX, locationY } = evt.nativeEvent
+      sendControlEvent({
+        type: 'mousedown',
+        button: 0,
+        x: locationX / SCREEN_W,
+        y: locationY / SCREEN_H,
+      })
+    },
+    onPanResponderMove: (evt) => {
+      const { locationX, locationY } = evt.nativeEvent
       sendControlEvent({
         type: 'mousemove',
         x: locationX / SCREEN_W,
@@ -169,10 +180,13 @@ export default function SessionScreen({ navigation, route }) {
       })
     },
     onPanResponderRelease: (evt) => {
-      sendControlEvent({ type: 'mouseclick', button: 0 })
-    },
-    onPanResponderGrant: (evt) => {
-      // Long press = right click
+      const { locationX, locationY } = evt.nativeEvent
+      sendControlEvent({
+        type: 'mouseup',
+        button: 0,
+        x: locationX / SCREEN_W,
+        y: locationY / SCREEN_H,
+      })
     },
   })
 

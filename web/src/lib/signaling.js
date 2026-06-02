@@ -42,9 +42,9 @@ export function connectSignaling() {
       // With ['websocket'] only, every blocked network = silent failure.
       transports:          ['polling', 'websocket'],
       upgrade:              true,
-      reconnectionAttempts: 10,
-      reconnectionDelay:    2000,
-      reconnectionDelayMax: 10000,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay:    1000,
+      reconnectionDelayMax: 15000,
       timeout:              30000,
     })
   } catch (err) {

@@ -5,6 +5,8 @@ import useAppStore from '../store/appStore'
 let peerConnection = null
 let localStream = null
 let dataChannel = null
+let pendingCandidates = []
+let controlHandlers = {}
 
 export function getPeerConnection() { return peerConnection }
 export function getDataChannel() { return dataChannel }
@@ -12,9 +14,12 @@ export function getDataChannel() { return dataChannel }
 const ICE_DEFAULTS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
 ]
 
 export function createPeerConnection(iceConfig, handlers = {}) {
+  controlHandlers = handlers
   const iceServers = iceConfig?.iceServers || ICE_DEFAULTS
 
   peerConnection = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 })
@@ -27,7 +32,15 @@ export function createPeerConnection(iceConfig, handlers = {}) {
     const state = peerConnection.iceConnectionState
     useAppStore.getState().setPeerState(state)
     handlers.onStateChange?.(state)
-    if (state === 'failed') peerConnection.restartIce()
+    if (state === 'failed') {
+      console.warn('[WebRTC] ICE failed, requesting restart…')
+      peerConnection.restartIce()
+      handlers.onIceRestart?.()
+    }
+  }
+
+  peerConnection.onconnectionstatechange = () => {
+    handlers.onStateChange?.(peerConnection.connectionState)
   }
 
   peerConnection.ontrack = (event) => {
@@ -78,36 +91,64 @@ export async function captureMicrophone() {
   })
 }
 
-export async function createOffer(targetSocketId, sessionId) {
+export async function createOffer(targetSocketId, sessionId, { iceRestart = false } = {}) {
   const socket = getSocket()
-  dataChannel = peerConnection.createDataChannel('control', { ordered: true })
-  setupDataChannel(dataChannel, {})
+  if (!peerConnection) throw new Error('No peer connection')
 
-  const offer = await peerConnection.createOffer()
+  if (!dataChannel || dataChannel.readyState === 'closed') {
+    dataChannel = peerConnection.createDataChannel('control', { ordered: true, maxRetransmits: 3 })
+    setupDataChannel(dataChannel, controlHandlers)
+  }
+
+  const offer = await peerConnection.createOffer({
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: true,
+    iceRestart,
+  })
   await peerConnection.setLocalDescription(offer)
   socket.emit('webrtc:offer', { targetSocketId, offer, sessionId })
 }
 
 export async function handleOffer(offer, fromSocketId, sessionId) {
   const socket = getSocket()
+  if (!peerConnection) throw new Error('No peer connection')
+
+  if (peerConnection.signalingState === 'have-local-offer') {
+    await peerConnection.setLocalDescription({ type: 'rollback' })
+  }
+
   await peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
+
+  for (const c of pendingCandidates) {
+    await peerConnection.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
+  }
+  pendingCandidates = []
+
   const answer = await peerConnection.createAnswer()
   await peerConnection.setLocalDescription(answer)
   socket.emit('webrtc:answer', { targetSocketId: fromSocketId, answer, sessionId })
 }
 
 export async function handleAnswer(answer) {
+  if (!peerConnection) return
   if (peerConnection.signalingState !== 'have-local-offer') return
   await peerConnection.setRemoteDescription(new RTCSessionDescription(answer))
+
+  for (const c of pendingCandidates) {
+    await peerConnection.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
+  }
+  pendingCandidates = []
 }
 
 export async function addIceCandidate(candidate) {
   try {
     if (peerConnection?.remoteDescription) {
       await peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
+    } else {
+      pendingCandidates.push(candidate)
     }
   } catch (err) {
-    console.warn('[WebRTC] ICE error:', err.message)
+    console.warn('[WebRTC] ICE error (ignored):', err.message)
   }
 }
 
@@ -154,4 +195,6 @@ export function closePeerConnection() {
   dataChannel = null
   peerConnection?.close()
   peerConnection = null
+  pendingCandidates = []
+  controlHandlers = {}
 }

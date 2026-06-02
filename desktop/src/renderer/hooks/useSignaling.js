@@ -17,10 +17,12 @@ export function connectSignaling(serverUrl) {
       deviceId: store.deviceId,
       displayName: store.user?.displayName || `Desktop-${store.deviceId?.slice(-6)}`,
     },
-    transports: ['websocket'],
-    reconnectionAttempts: 15,
+    transports: ['polling', 'websocket'],
+    upgrade: true,
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
-    reconnectionDelayMax: 8000,
+    reconnectionDelayMax: 15000,
+    timeout: 30000,
   })
 
   socket.on('connect', () => {

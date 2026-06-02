@@ -44,8 +44,9 @@ export function createPeerConnection(iceConfig, handlers = {}) {
     useSessionStore.getState().setPeerState?.(state)
     handlers.onStateChange?.(state)
     if (state === 'failed') {
-      console.warn('[WebRTC] ICE failed, restarting…')
+      console.warn('[WebRTC] ICE failed, requesting restart…')
       peerConnection.restartIce()
+      handlers.onIceRestart?.()
     }
   }
 
@@ -212,17 +213,19 @@ export async function stopReverseScreen(stream, remoteSocketId, sessionId) {
 /**
  * Host: open data channel, create offer, send to viewer
  */
-export async function createOffer(targetSocketId, sessionId) {
+export async function createOffer(targetSocketId, sessionId, { iceRestart = false } = {}) {
   const socket = getSocket()
   if (!peerConnection) throw new Error('No peer connection')
 
-  // Open reliable data channel for control events (host side creates it)
-  dataChannel = peerConnection.createDataChannel('control', { ordered: true, maxRetransmits: 3 })
-  setupDataChannel(dataChannel, controlHandlers)
+  if (!dataChannel || dataChannel.readyState === 'closed') {
+    dataChannel = peerConnection.createDataChannel('control', { ordered: true, maxRetransmits: 3 })
+    setupDataChannel(dataChannel, controlHandlers)
+  }
 
   const offer = await peerConnection.createOffer({
     offerToReceiveAudio: true,
     offerToReceiveVideo: true,
+    iceRestart,
   })
   await peerConnection.setLocalDescription(offer)
   socket.emit('webrtc:offer', { targetSocketId, offer, sessionId })
@@ -235,9 +238,14 @@ export async function handleOffer(offer, fromSocketId, sessionId) {
   const socket = getSocket()
   if (!peerConnection) throw new Error('No peer connection')
 
+  // If we're in stable state, we need to handle a new offer (renegotiation or ICE restart)
+  // If we're in have-local-offer state (glare), rollback first
+  if (peerConnection.signalingState === 'have-local-offer') {
+    await peerConnection.setLocalDescription({ type: 'rollback' })
+  }
+
   await peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
 
-  // Flush any buffered ICE candidates
   for (const c of pendingCandidates) {
     await peerConnection.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
   }
