@@ -83,47 +83,46 @@ export default function Home() {
     try {
       let sessionId, sessionCode, password, iceConfig
 
-      if (backendOnline) {
-        // Try backend first
-        try {
-          const { sessionApi } = await import('../lib/api')
-          const res = await sessionApi.create({ platform: 'web' })
-          ;({ sessionId, sessionCode, password, iceConfig } = res)
-
-          // Make sure the signaling socket is connected before we announce
-          // the session. If we skip this step the viewer can hit session:join
-          // before the host's WS handler has registered the session, causing
-          // a spurious "Session not found" error.
-          let socket = getSocket()
-          if (!socket || !socket.connected) {
-            socket = connectSignaling()
-            if (!socket.connected) {
-              await new Promise((res, rej) => {
-                const t = setTimeout(() => rej(new Error('Signaling connect timeout')), 30000)
-                socket.once('connect', () => { clearTimeout(t); res() })
-                socket.once('connect_error', (e) => { clearTimeout(t); rej(e) })
-              })
-            }
-          }
+      // ALWAYS wait for signaling to connect first. The previous version
+      // checked the `backendOnline` flag and silently fell back to a
+      // makeLocalSession() that the backend doesn't know about — viewers
+      // joining with that code hit "Session not found" because the session
+      // never existed server-side. Backend cold-start can be 30-60s on
+      // Render free tier, so we wait up to 3 min before giving up.
+      let socket = getSocket()
+      if (!socket || !socket.connected) {
+        console.info('[start-session] Waiting for signaling connection…')
+        socket = connectSignaling()
+        if (!socket.connected) {
           await new Promise((res, rej) => {
-            const t = setTimeout(() => rej(new Error('Session register timeout')), 30000)
-            socket.emit('session:create', { sessionId, sessionCode, passwordHash: password }, (r) => {
-              clearTimeout(t)
-              r?.error ? rej(new Error(r.error)) : res(r)
-            })
+            const t = setTimeout(() => rej(new Error('Could not reach the signalling server within 3 minutes. Check your connection or visit /diagnostic to find out which layer is blocked.')), 180000)
+            const onOk    = () => { cleanup(); res() }
+            const onFail  = (e) => { cleanup(); rej(new Error(`Signalling connection failed: ${e?.message || e}`)) }
+            const cleanup = () => { clearTimeout(t); socket.off('connect', onOk); socket.off('connect_error', onFail) }
+            socket.on('connect', onOk)
+            socket.on('connect_error', onFail)
           })
-        } catch (err) {
-          console.warn('[handleStartSession] Backend session failed:', err?.message)
-          // Fallback to local session for offline P2P
-          // Fallback to local session
-          ;({ sessionId, sessionCode, password } = makeLocalSession())
-          iceConfig = null
         }
-      } else {
-        // Offline-first: local session, WebRTC signaling peer-to-peer via URL
-        ;({ sessionId, sessionCode, password } = makeLocalSession())
-        iceConfig = null
       }
+      console.info('[start-session] Signaling connected, creating REST session…')
+
+      // REST create
+      const { sessionApi } = await import('../lib/api')
+      const res = await sessionApi.create({ platform: 'web' })
+      ;({ sessionId, sessionCode, password, iceConfig } = res)
+      console.info('[start-session] REST session created:', { sessionId, sessionCode })
+
+      // Announce the session to the signalling server. With the new backend
+      // reclaim logic this only matches when sessionId/Code align — no risk
+      // of accidentally hijacking a previous stale session.
+      await new Promise((res, rej) => {
+        const t = setTimeout(() => rej(new Error('Signalling server did not acknowledge session within 60 sec — check /diagnostic.')), 60000)
+        socket.emit('session:create', { sessionId, sessionCode, passwordHash: password }, (r) => {
+          clearTimeout(t)
+          if (r?.error) rej(new Error(r.error))
+          else { console.info('[start-session] session:create ack:', r); res(r) }
+        })
+      })
 
       const session = { sessionId, sessionCode, password, iceConfig, isHost: true }
       setActiveSession(session)
@@ -338,21 +337,25 @@ export default function Home() {
                 <button
                   id="btn-start-session"
                   onClick={handleStartSession}
-                  disabled={isStarting || !canShareScreen()}
+                  disabled={isStarting || !canShareScreen() || !backendOnline}
                   className="btn-primary w-full py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isStarting ? (
                     <><span className="spinner" style={{ width: 16, height: 16 }} /> Starting…</>
                   ) : !canShareScreen() ? (
                     <><Smartphone size={16} /> Desktop Only</>
+                  ) : !backendOnline ? (
+                    <><span className="spinner" style={{ width: 16, height: 16 }} /> Waiting for backend…</>
                   ) : (
                     <><Zap size={16} /> Start Session</>
                   )}
                 </button>
                 <p className="text-xs text-slate-500 mt-3 text-center">
-                  {canShareScreen()
-                    ? "Your screen won't share until you approve"
-                    : "Screen sharing requires a desktop browser or the desktop app"}
+                  {!canShareScreen()
+                    ? "Screen sharing requires a desktop browser or the desktop app"
+                    : !backendOnline
+                    ? <>Connecting to <code className="text-brand-300">remotelink-backend.onrender.com</code>… first visit can take ~30 sec while the free-tier server wakes up. <a href="/diagnostic" className="underline text-brand-300">Run diagnostic</a> if stuck.</>
+                    : "Your screen won't share until you approve"}
                 </p>
               </div>
             </div>
