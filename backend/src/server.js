@@ -82,22 +82,29 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/calls', callRoutes);
 
 // ── ICE Server Config Endpoint ────────────────────────────────
+//
+// Configuration sources (in priority order):
+//   1. TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN  → dynamic, signed STUN+TURN
+//      (Twilio's NAT Traversal Service, recommended for production —
+//      generous free tier ~10GB/month).
+//   2. TURN_URL + TURN_USERNAME + TURN_CREDENTIAL  → static custom TURN.
+//   3. Fallback: Google's public STUN servers only (P2P works when both
+//      peers are on networks that allow direct UDP punch-through).
+//
+// Removed: openrelay.metered.ca was deprecated in late 2024 and the
+//          "openrelayproject" credentials are dead / heavily rate-limited.
+//          Handing them out caused silent media-plane failures on strict
+//          NAT networks. Better to omit TURN entirely and surface the
+//          issue than ship known-broken credentials.
 app.get('/api/ice-config', async (req, res) => {
-  let iceServers = [
+  const iceServers = [
     { urls: process.env.STUN_URL || 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    // ── Free public TURN (Open Relay Project) for NAT traversal ──
-    // Used when peers are behind strict NATs and STUN alone fails.
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp',
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // Cloudflare's public STUN (operational + globally distributed)
+    { urls: 'stun:stun.cloudflare.com:3478' },
   ];
 
   const sid = process.env.TWILIO_ACCOUNT_SID;
@@ -108,30 +115,34 @@ app.get('/api/ice-config', async (req, res) => {
       const auth = Buffer.from(`${sid}:${token}`).toString('base64');
       const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Tokens.json`, {
         method: 'POST',
-        headers: {
-          Authorization: `Basic ${auth}`,
-        },
+        headers: { Authorization: `Basic ${auth}` },
       });
       if (response.ok) {
         const data = await response.json();
-        if (data.ice_servers && data.ice_servers.length > 0) {
-          iceServers = data.ice_servers;
+        if (data.ice_servers?.length) {
+          logger.info('[ICE] Returning Twilio-issued ICE servers');
+          return res.json({ iceServers: data.ice_servers, source: 'twilio' });
         }
       } else {
-        logger.error(`Twilio token API returned error status: ${response.status}`);
+        logger.error(`[ICE] Twilio token API returned ${response.status}`);
       }
     } catch (err) {
-      logger.error('Failed to fetch Twilio ICE servers', err);
+      logger.error('[ICE] Failed to fetch Twilio ICE servers:', err.message);
     }
-  } else if (process.env.TURN_URL) {
+  }
+
+  if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
     iceServers.push({
       urls: process.env.TURN_URL,
       username: process.env.TURN_USERNAME,
       credential: process.env.TURN_CREDENTIAL,
     });
+    logger.info('[ICE] Returning STUN + custom TURN');
+    return res.json({ iceServers, source: 'custom-turn' });
   }
 
-  res.json({ iceServers });
+  logger.warn('[ICE] No TURN configured. P2P will fail behind strict NATs. Set TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN on Render to fix.');
+  return res.json({ iceServers, source: 'stun-only' });
 });
 
 // ── API Docs ──────────────────────────────────────────────────

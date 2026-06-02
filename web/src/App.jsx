@@ -8,6 +8,7 @@ import VideoCall from './pages/VideoCall'
 import JoinLink from './pages/JoinLink'
 import Download from './pages/Download'
 import ShareLink from './pages/ShareLink'
+import Diagnostic from './pages/Diagnostic'
 import useSessionStore from './store/sessionStore'
 
 function App() {
@@ -55,6 +56,7 @@ function App() {
         <Route path="/j/:code/:pass?"   element={<JoinLink />} />
         <Route path="/share/:code/:pass?" element={<ShareLink />} />
         <Route path="/download"         element={<Download />} />
+        <Route path="/diagnostic"       element={<Diagnostic />} />
         <Route path="/admin"            element={<Admin />} />
         <Route path="*"                 element={<Navigate to="/" replace />} />
       </Routes>
