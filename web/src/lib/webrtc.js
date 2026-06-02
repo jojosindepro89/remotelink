@@ -115,7 +115,28 @@ export async function captureScreen(options = {}) {
       throw new Error('Screen sharing is not supported on this device. Use a desktop browser or the desktop app to host a session.')
     }
 
-    const stream = await navigator.mediaDevices.getDisplayMedia(constraints)
+    // Chrome can kill getDisplayMedia with "timeout starting video source"
+    // if the user takes too long to pick a screen. Retry up to 3 times.
+    let stream = null
+    let lastErr = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia(constraints)
+        break
+      } catch (e) {
+        lastErr = e
+        const msg = (e.message || '').toLowerCase()
+        if (msg.includes('timeout') || msg.includes('video source')) {
+          console.warn(`[WebRTC] Screen share attempt ${attempt + 1} timed out, retrying…`)
+          continue
+        }
+        throw e
+      }
+    }
+    if (!stream) {
+      throw lastErr || new Error('Screen share failed after 3 attempts')
+    }
+
     localStream = stream
 
     // Auto-stop when user hits browser's "Stop sharing" button
